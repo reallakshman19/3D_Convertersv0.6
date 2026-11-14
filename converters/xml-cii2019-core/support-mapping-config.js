@@ -22,7 +22,9 @@ function normalizeMatch(match) {
 
 const HALT = 'ST' + 'OP';
 const LINE_LIMIT_KIND = `LINE${HALT}`;
-const SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE';
+// Narrow generic intent rules visibly; specific SPRE/NAME rows remain executable.
+const LEGACY_SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE';
+const SUPPORT_INTENT_FIELDS = 'SKEY,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,MDSSUPPTYPE';
 export const DEFAULT_STOP_KEYWORD_HELP = 'Default stop detection: Line stop, Limit stop, Axial stop, Directional anchor. Generic Anchor maps to ANCHOR. Generic REST/LINE text is not used as stop evidence.';
 const LIMIT_PATTERN = String.raw`\b(?:LINE\s*STOP|LIMIT\s*STOP|AXIAL\s*STOP|DIRECTIONAL\s+ANCHOR)\b`;
 
@@ -140,7 +142,7 @@ const REQUIRED_SUPPORT_RULES = Object.freeze([
   }),
 ]);
 
-function mergeRequiredSupportRules(sourceRules = []) {
+function mergeRequiredSupportRules(sourceRules = [], preserveSaved = false) {
   const existingById = new Map();
   for (const rule of Array.isArray(sourceRules) ? sourceRules : []) {
     const id = toText(rule?.id);
@@ -150,9 +152,14 @@ function mergeRequiredSupportRules(sourceRules = []) {
   const requiredIds = new Set(REQUIRED_SUPPORT_RULES.map((rule) => rule.id));
   const merged = REQUIRED_SUPPORT_RULES.map((required) => {
     const existing = existingById.get(required.id) || {};
+    const saved = preserveSaved && existing.id ? existing : {};
+    const field = saved.field && saved.field !== LEGACY_SUPPORT_INTENT_FIELDS
+      ? saved.field : required.field;
     return {
       ...existing,
       ...required,
+      ...saved,
+      field,
       enabled: existing.enabled === false ? false : required.enabled,
       locked: existing.locked === true || required.locked === true,
     };
@@ -233,7 +240,7 @@ export function migrateSupportMappingConfig(config = {}, mapperRules = null) {
     for (const kind of SUPPORT_KINDS) {
       profiles[kind] = normalizeSupportKindProfile(existing.kindProfiles?.[kind] || {}, defaultProfiles[kind] || {});
     }
-    const sourceRules = mergeRequiredSupportRules(Array.isArray(existing.rules) ? existing.rules : []);
+    const sourceRules = mergeRequiredSupportRules(Array.isArray(existing.rules) ? existing.rules : [], true);
     return { version: 2, useJsonForRestraints: existing.useJsonForRestraints !== false, rules: sourceRules.map(normalizeSupportRuleForConfig), kindProfiles: profiles };
   }
 

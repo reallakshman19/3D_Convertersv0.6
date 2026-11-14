@@ -6,12 +6,9 @@ import { migrateSupportMappingConfig } from './support-mapping-config.js';
 //    14 -> REST (+Y), 8 -> GUIDE (GUI), 9 -> LINESTOP (LIM).
 // 2. Otherwise the Step 7 support table ("Use JSON/support mapper for
 //    restraints"): its enabled rows for staged JSON, in priority order, then
-//    the keyword text pass. The table reads ONLY the member's own description
-//    and code fields (DTXR, DESC, DESCRIPTION, MDSDTXR, CMPSUPTYPE,
-//    MDSSUPPTYPE, SKEY, ComponentType); never catalogue paths (SPRE) or names
-//    (NAME): a path like /MDS-Ancillaries/ANCI/... must not make a stop a REST.
-//    Generated labels (SUPPORT_KIND / SUPPORT_MAPPER_KIND / SUPPORT_TYPE) are
-//    the weakest evidence, used only when nothing else decides.
+//    the keyword text pass. Explicit catalogue and NAME rules execute as written;
+//    generic built-in intent rows have a narrower visible field scope.
+//    Generated labels are fallback-only, never competing with source evidence.
 // 3. Fail closed, as before: rows of equal priority that match with different
 //    kinds, and a regex outside the shared JS/Python subset or over 512 chars,
 //    are refused. A description naming two kinds, or one kind the table
@@ -22,8 +19,10 @@ const CODE_BY_LABEL = Object.freeze({ '+Y': 14, GUI: 8, LIM: 9 });
 const GOVERNED = Object.freeze(['REST', 'GUIDE', 'LINESTOP']);
 const SUPPORT_KINDS = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'ANCHOR', 'SPRING']);
 const DESCRIPTION_KEYS = Object.freeze(['DTXR', 'DESC', 'DESCRIPTION']);
-const TABLE_FIELDS = Object.freeze(['DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'CMPSUPTYPE', 'MDSSUPPTYPE',
+const TEXT_FALLBACK_FIELDS = Object.freeze(['DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'CMPSUPTYPE', 'MDSSUPPTYPE',
   'SKEY', 'COMPONENTTYPE']);
+const TABLE_FIELDS = Object.freeze([...TEXT_FALLBACK_FIELDS, 'SPRE', 'NAME', 'NODETYPE', 'NODEGAP',
+  'CMPSUPGAP', 'CMPSUPGAPPOS', 'CMPSUPGAPPS']);
 const GENERATED_FIELDS = Object.freeze(['SUPPORTKIND', 'SUPPORTMAPPERKIND', 'SUPPORTTYPE']);
 const STAGED_SOURCES = Object.freeze(['', 'ALL', 'STAGED-JSON', 'JSON']);
 // Regex syntax that JS and Python read differently (or only one reads).
@@ -88,8 +87,9 @@ const fieldName = (name) => {
 
 function ruleValues(evidence, rule) {
   const wanted = terms(rule.field).map(fieldName);
-  if (!wanted.length || wanted.includes('*') || wanted.includes('ANY')) return Object.values(evidence);
-  return Object.entries(evidence).filter(([key]) => wanted.includes(key)).map(([, value]) => value);
+  const wildcard = !wanted.length || wanted.includes('*') || wanted.includes('ANY');
+  return Object.entries(evidence).filter(([key]) => wildcard
+    ? TABLE_FIELDS.includes(key) || GENERATED_FIELDS.includes(key) : wanted.includes(key));
 }
 
 function compiledRegex(rule) {
@@ -123,25 +123,45 @@ function kindFromText(value) {
   return '';
 }
 
-export function tableSupportKind(attrs = {}, config = {}, onlyUserRows = false) {
-  const f = fields(attrs);
-  const evidence = {};
-  for (const key of TABLE_FIELDS) if (f[key]) evidence[key] = f[key];
-  if (!DESCRIPTION_KEYS.some((key) => evidence[key]) && evidence.MDSDTXR) evidence.DESCRIPTION = evidence.MDSDTXR;
+function matchTableRules(evidence, rules) {
   let first = null;
-  const isUserRow = (rule) => !/^(?:builtin-|standalone-mds-)/.test(rule.id);
-  for (const rule of tableRules(config).filter((row) => !onlyUserRows || isUserRow(row))) {
+  for (const rule of rules) {
     if (first && rule.priority !== first.priority) break;
     if (!SUPPORT_KINDS.includes(rule.kind)) continue;
-    if (!ruleValues(evidence, rule).some((value) => ruleMatches(rule, value))) continue;
-    if (!first) { first = rule; continue; }
-    if (rule.kind !== first.kind) {
-      throw refuse('PREFINAL_RESTRAINT_KIND_AMBIGUOUS', `Step 7 rows ${first.id} and ${rule.id} have equal priority and different kinds`);
+    const hit = ruleValues(evidence, rule).find(([, value]) => ruleMatches(rule, value));
+    if (!hit) continue;
+    if (!first) {
+      first = { kind: rule.kind, ruleId: rule.id, priority: rule.priority,
+        matchedField: hit[0], matchedValue: hit[1] };
+    } else if (rule.kind !== first.kind) {
+      throw refuse('PREFINAL_RESTRAINT_KIND_AMBIGUOUS', `Step 7 rows ${first.ruleId} and ${rule.id} have equal priority and different kinds`);
     }
   }
+  return first;
+}
+
+function tableEvidence(attrs) {
+  const f = fields(attrs);
+  const evidence = Object.fromEntries(Object.entries(f).filter(([key]) => !GENERATED_FIELDS.includes(key)));
+  if (!DESCRIPTION_KEYS.some((key) => evidence[key]) && evidence.MDSDTXR) evidence.DESCRIPTION = evidence.MDSDTXR;
+  return { f, evidence };
+}
+
+export function tableSupportDecision(attrs = {}, config = {}, onlyUserRows = false) {
+  const { evidence } = tableEvidence(attrs);
+  const isUserRow = (rule) => !/^(?:builtin-|standalone-mds-)/.test(rule.id);
+  return matchTableRules(evidence, tableRules(config).filter(rule => !onlyUserRows || isUserRow(rule)));
+}
+
+export function tableSupportKind(attrs = {}, config = {}, onlyUserRows = false) {
+  const first = tableSupportDecision(attrs, config, onlyUserRows);
   if (first) return first.kind;
   if (onlyUserRows) return '';
-  return kindFromText(Object.values(evidence).join(' '));
+  const { f, evidence } = tableEvidence(attrs);
+  const semantic = kindFromText(TEXT_FALLBACK_FIELDS.map(key => evidence[key] || '').join(' '));
+  if (semantic) return semantic;
+  const generated = Object.fromEntries(Object.entries(f).filter(([key]) => GENERATED_FIELDS.includes(key)));
+  return matchTableRules(generated, tableRules(config))?.kind || '';
 }
 
 export function generatedSupportKind(attrs = {}) {

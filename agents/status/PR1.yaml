@@ -1,0 +1,10 @@
+schema: AgentStatus.v1
+pr: 1
+branch: fix/xml229-step7-table-parity-20261114
+base: main
+state: DRAFT_SCOPED_CANDIDATE
+merge_authority: OWNER_ONLY_NOT_GRANTED
+isolated_js_source_body: PASS
+full_node_python_browser_native_glrd: NOT_RUN
+cii_release_authority: HELD
+exact_next_action: Run focused Node/Python tests and exact GLRD source-to-CII replay before merge.

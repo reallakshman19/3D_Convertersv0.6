@@ -1,0 +1,18 @@
+schema: AgentClaim.v1
+pr_or_wip: PR1
+claim_state: DRAFT_SCOPED_CANDIDATE
+branch: fix/xml229-step7-table-parity-20261114
+pr_url: https://github.com/reallakshman19/3D_Convertersv0.6/pull/1
+files:
+  exact:
+    - converters/xml-cii2019-core/support-kind-precedence.js
+    - converters/xml-cii2019-core/support-mapping-config.js
+    - converters/scripts/xml229_support_type_mapper.py
+    - tabs/xml-cii-2019-standalone/xml-cii-json-trace-fields.js
+    - tabs/xml-cii-2019-standalone/xml-cii-support-type-mapper.js
+    - tests/xml229-step7-configured-field-parity.test.mjs
+  mirrors: [docs, v045]
+authority_domains: [step7_support_mapping, source_evidence_precedence]
+protected: [source_NODETYPE, authored_constraints, native_writer, geometry, accepted_mass, release_gate]
+coordination: ORIGINAL_REPO_PHYSICAL_VERTEX_STACK_REQUIRES_REVIEW
+merge_authority: OWNER_ONLY_NOT_GRANTED

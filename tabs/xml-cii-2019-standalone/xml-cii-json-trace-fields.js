@@ -29,7 +29,7 @@ const PRIMARY_FIELD_ORDER = Object.freeze(['DTXR', 'DESC', 'DESCRIPTION', 'MDSDT
 // Bounded source-only evidence survives stripRawMember independently of user
 // display-field selections. Never feed derived labels back into this projection.
 const SUPPORT_EVIDENCE_FIELDS = Object.freeze([
-  'DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'NAME', 'SPRE', 'SKEY', 'CMPSUPTYPE',
+  'DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'NAME', 'SPRE', 'SKEY', 'CMPSUPTYPE', 'COMPONENTTYPE',
   'MDSSUPPTYPE', 'SUPPORT_KIND', 'SUPPORT_TYPE', 'SUPPORT_MAPPER_KIND',
   'NODETYPE', 'NODEGAP', 'CMPSUPGAP', 'CMPSUPGAP_POS', 'CMPSUPGAP_PS',
 ]);
@@ -125,6 +125,15 @@ function semanticFields(rawValue, config = {}) {
   return out;
 }
 
+// Project explicit named rule inputs even when display capture is disabled.
+function supportEvidenceFields(config = {}) {
+  const rules = Array.isArray(config.supportMapping?.rules) ? config.supportMapping.rules : [];
+  const names = rules.filter(rule => rule && rule.enabled !== false)
+    .flatMap(rule => text(rule.field).split(/[,;\n]/))
+    .map(name => name.trim()).filter(name => name && name !== '*' && name.toUpperCase() !== 'ANY');
+  return [...new Set([...SUPPORT_EVIDENCE_FIELDS, ...names])];
+}
+
 export function decorateJsonTraceMember(member = {}, config = {}) {
   const raw = member.raw || member;
   const semantic = semanticFields(raw, config);
@@ -135,7 +144,7 @@ export function decorateJsonTraceMember(member = {}, config = {}) {
     capturedFields: captureConfiguredJsonTraceFields(raw, config),
     // Explicit source profiles retain their existing profile-governed behavior.
     supportEvidence: sourceSchemaEnabled(config) ? {} :
-      captureConfiguredJsonTraceFields(raw, { captureFields: SUPPORT_EVIDENCE_FIELDS }),
+      captureConfiguredJsonTraceFields(raw, { captureFields: supportEvidenceFields(config) }),
     semanticFields: semantic,
   };
 }
