@@ -1,4 +1,4 @@
-import { governedSupportKind } from '../../converters/xml-cii2019-core/support-kind-precedence.js';
+import { governedSupportKind, tableSupportDecision } from '../../converters/xml-cii2019-core/support-kind-precedence.js';
 const KINDS = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'ANCHOR']);
 
 const DEFAULT_ROWS = Object.freeze([
@@ -108,9 +108,7 @@ function splitOccurrenceSegments(row) {
 
 function structuredMemberEvidence(member = {}) {
   const fields = object(member.supportEvidence);
-  const hasEvidence = ['DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'MDSSUPPTYPE',
-    'CMPSUPTYPE', 'SPRE', 'SUPPORT_KIND', 'SUPPORT_TYPE', 'SUPPORT_MAPPER_KIND', 'NODETYPE']
-    .some(key => text(fields[key]));
+  const hasEvidence = Object.values(fields).some(value => text(value));
   if (!hasEvidence) return null;
   return {
     sourceFields: fields,
@@ -134,14 +132,16 @@ function ownerRuleResult(fields, mapperRows, supportConfig) {
   if (!decided.kind) return null;
   const row = mapperRows.find((entry) => entry.kind === decided.kind) || defaultRow(decided.kind);
   const byNodeType = decided.source === 'NODETYPE';
+  const rule = decided.source === 'step7-support-table' ? tableSupportDecision(fields, supportConfig) : null;
   return {
     status: 'matched', supportKind: decided.kind, ciiKind: row.ciiKind, ciiPreview: row.ciiPreview,
     confidence: 'HIGH', confidenceScore: 1,
-    matchedAlias: byNodeType ? 'NODETYPE ' + text(fields.NODETYPE) : 'Step 7 support table',
+    matchedAlias: byNodeType ? 'NODETYPE ' + text(fields.NODETYPE) : (rule?.ruleId || 'Step 7 support table'),
     matchMode: byNodeType ? 'source-nodetype' : 'step7-support-table',
     candidates: [], suppressedCandidates: [], matches: [],
     decisionReason: byNodeType ? 'Source NODETYPE wins (Owner rule).'
-      : 'Step 7 support table (Use JSON/support mapper for restraints).',
+      : rule ? `Step 7 rule ${rule.ruleId} (priority ${rule.priority}): ${rule.matchedField}=${rule.matchedValue}`
+        : `Support kind resolved from ${decided.source}.`,
   };
 }
 

@@ -23,7 +23,7 @@ const PRIMARY_FIELD_ORDER = Object.freeze(['DTXR', 'DESC', 'DESCRIPTION', 'MDSDT
 // Bounded source-only evidence survives stripRawMember independently of user
 // display-field selections (PR 408). Never feed derived labels back into it.
 const SUPPORT_EVIDENCE_FIELDS = Object.freeze([
-  'DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'NAME', 'SPRE', 'SKEY', 'CMPSUPTYPE',
+  'DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'NAME', 'SPRE', 'SKEY', 'CMPSUPTYPE', 'COMPONENTTYPE',
   'MDSSUPPTYPE', 'SUPPORT_KIND', 'SUPPORT_TYPE', 'SUPPORT_MAPPER_KIND',
   'NODETYPE', 'NODEGAP', 'CMPSUPGAP', 'CMPSUPGAP_POS', 'CMPSUPGAP_PS',
 ]);
@@ -104,11 +104,20 @@ export function formatConfiguredJsonTraceMember(member = {}, config = {}) {
   return [output, ...extras].filter(Boolean).join(',');
 }
 
+// Project explicit named rule inputs even when display capture is disabled.
+function supportEvidenceFields(config = {}) {
+  const rules = Array.isArray(config.supportMapping?.rules) ? config.supportMapping.rules : [];
+  const names = rules.filter(rule => rule && rule.enabled !== false)
+    .flatMap(rule => text(rule.field).split(/[,;\n]/))
+    .map(name => name.trim()).filter(name => name && name !== '*' && name.toUpperCase() !== 'ANY');
+  return [...new Set([...SUPPORT_EVIDENCE_FIELDS, ...names])];
+}
+
 export function decorateJsonTraceMember(member = {}, config = {}) {
   return {
     ...member,
     capturedFields: captureConfiguredJsonTraceFields(member.raw || member, config),
-    supportEvidence: captureConfiguredJsonTraceFields(member.raw || member, { captureFields: SUPPORT_EVIDENCE_FIELDS }),
+    supportEvidence: captureConfiguredJsonTraceFields(member.raw || member, { captureFields: supportEvidenceFields(config) }),
   };
 }
 

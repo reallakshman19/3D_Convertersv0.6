@@ -7,3 +7,9 @@
 - A5 Minimal patch: JS config/evaluator/trace/preview and independent Python mirror with docs/v045 mirrors; synthetic tests. No physical-vertex integration or release authorization in this phase.
 - Highest risk: other legacy/worker consumers may still interpret table differently; full integration and source acceptance needed.
 - EXACT_NEXT_ACTION: implement scoped table rule field handling on this branch; run focused synthetic actual-source evaluator checks, then full Node/Python/browser and GLRD replay before merge.
+
+## Implementation checkpoint
+- PASS: 8 isolated JS source-body evaluator cases, including actual type mutation helper (prior execution). Exact Node/Python/browser and GLRD tests NOT_RUN. Full suite pending.
+- Root/docs/v045 JS configuration, source evaluator, trace projection and preview updated; root/docs Python mirror. Saved GT5 edits preserved; shipped GT5 GUIDE default unchanged. Generic builtin rows migrate exact obsolete broad field template to explicit source-only scope; other saved edits preserved. Named custom fields supported, wildcard bounded to support evidence; generated labels fallback only. Preview reports winning source row ID/priority/field/value. No topology/writer changes.
+- Original blob backups: commit 008e1b46329f7bb14d63e11e8c4a064a32b53d5c. No private source data copied. Common skill 404, local git DNS failure; separate physical vertex stack remains unintegrated.
+- EXACT_NEXT_ACTION: run node --test tests/xml229-step7-configured-field-parity.test.mjs tests/xml-cii-support-kind-owner-precedence.test.mjs tests/xml229-description-only-restraint-gap-native.test.mjs in checkout; replay GLRD original inputs/config in actual served browser, compare source members and CII node 3610 type 14/9 with exact source gap. Do not merge until qualified.
