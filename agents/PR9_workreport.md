@@ -14,3 +14,4 @@ Changed files:
 EXACT_NEXT_ACTION: inspect exact-head HOLD Node/Python and native original-source results; coordinate prior PR1 and audit PR4/7; keep draft, no merge without explicit owner authorization. Audit explanation/trace separately.
 
 PR9 allocated; direct table edits and deletion also normalize these four permanent built-ins before persistence. No unrelated profile changes. Exact-head checks pending.
+Added actual visible Step 7 table regression in established HOLD harness and original-source PS4122 native GUIDE 10mm assertion alongside PS4131. No workflow edits. Exact-head validation pending.
