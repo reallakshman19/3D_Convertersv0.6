@@ -107,6 +107,13 @@ test('actual PS4131 source coverage shows three distinct native block/slot addre
     assert.deepEqual([row.retainedNode,row.actual,row.ciiBlock,row.ciiSlot],['3760',code,51,slot]);
     assert.equal(row.observedGap,0);
   }
+  const rest4130=actual.find(r=>r.source==='/PS-4130.1.1');
+  assert.ok(rest4130,'PS4130 source must appear in the audit');
+  assert.equal(rest4130.actual,14,'PS4130 source REST must trace to native +Y');
+  assert.equal(rest4130.observedGap,0);
+  assert.ok(rest4130.ciiBlock>0&&rest4130.ciiSlot>0,'PS4130 must have a verified native slot address');
+  console.log('PS4130_SOURCE_NATIVE_LINK '+JSON.stringify({node:rest4130.retainedNode,type:rest4130.actual,
+    block:rest4130.ciiBlock,slot:rest4130.ciiSlot,status:rest4130.ciiTraceStatus}));
   console.log('PS4131_SOURCE_NATIVE_LINKS '+JSON.stringify(actual.filter(r=>names.includes(r.source)).map(r=>
     ({source:r.source,node:r.retainedNode,type:r.actual,block:r.ciiBlock,slot:r.ciiSlot,status:r.ciiTraceStatus}))));
   assert.match(restraintAuditCsv(report),/RESOLVED_GROUP_CII_FIELDS_VERIFIED/);
