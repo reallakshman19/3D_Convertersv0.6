@@ -16,6 +16,10 @@ import {runStandaloneSupportTypeMapper} from '../v045/tabs/xml-cii-2019-standalo
 import {buildStandaloneCiiInvocation} from '../v045/converters/xml-cii-2019-standalone/invocation-builder.js';
 import {parseCiiEngineeringFields} from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-propagation-proof.mjs';
 
+import {runStandaloneResolverJsonTrace as activeTrace} from '../v045/tabs/xml-cii-2019-standalone/xml-cii-resolver-json-trace.js';
+import {runStandaloneResolverJsonTrace as rootTrace} from '../tabs/xml-cii-2019-standalone/xml-cii-resolver-json-trace.js';
+import {runStandaloneSupportTypeMapper as rootMapper} from '../tabs/xml-cii-2019-standalone/xml-cii-support-type-mapper.js';
+
 installWeightBasisXmlDom(globalThis);
 const root=new URL('../Benchmarks/XML-CII-2019/revamped/',import.meta.url);
 const xmlBytes=readFileSync(new URL('GLRD-1000-PSI-02.xml',root));
@@ -146,3 +150,17 @@ for(const mode of ['shipped-table','audit-signature-reconstruction','mapper-defa
     }
   });
 }
+
+test('PS4131 actual resolver-to-Preview retains arbitrary rule fields independent of capture settings',()=>{
+  const config=caseConfig('arbitrary-field-control'), supportConfigJson=JSON.stringify(config);
+  for(const [trace,mapper] of [[activeTrace,runStandaloneSupportTypeMapper],[rootTrace,rootMapper]]){
+    const result=trace({sourceKind:'xml',sourceText,stagedJsonText,supportConfigJson,
+      jsonConfig:{captureFields:['NAME']}});
+    const preview=mapper({supportConfigJson,resolverJsonTraceResult:result});
+    for(const [name,kind,id] of [[names[1],'GUIDE','owner-function-guide'],[names[2],'LINESTOP','owner-function-stop']]){
+      const rows=preview.previewRows.filter(r=>r.occurrenceName===name);
+      assert.ok(rows.length,'Missing actual Preview member '+name);
+      assert.ok(rows.every(r=>r.supportKind===kind&&r.matchedAlias===id),JSON.stringify(rows));
+    }
+  }
+});
