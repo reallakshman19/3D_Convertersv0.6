@@ -1,5 +1,5 @@
 import {createElement,downloadTextFile} from './xml-cii-adapted-dom.js';
-import {restraintAuditRows,restraintAuditCsv,restraintAuditHtml} from '../xml-cii-restraint-audit-export.js';
+import {restraintAuditRows,restraintAuditSourceGapRows,restraintAuditCsv,restraintAuditHtml} from '../xml-cii-restraint-audit-export.js';
 import {digestUtf8} from '../../../contracts/gc-pw-v1/contract.mjs';
 import {getXml229VerifiedEngineeringEntry} from '../integration/xml229-engineering-basis-authority.mjs';
 import {captureXml229NativeRunContext} from './xml229-native-run-context.mjs';
@@ -54,6 +54,45 @@ function renderRows(parent,rows) {
   parent.append(createElement('p',`Showing ${Math.min(rows.length,200)} of ${rows.length} field records. Downloads include all records.`),scroll);
 }
 
+function renderSourceGapRows(parent,report) {
+  const claims=restraintAuditSourceGapRows(report);
+  if(!report.sourceGapCoverage)return;
+  const summary=report.sourceGapCoverage.summary||{};
+  parent.appendChild(createElement('p',
+    'Original JSON gap-source reconciliation: '+(summary.inOriginalXml||0)+
+    ' in original XML, '+(summary.verified||0)+' verified in CII, '+
+    (summary.unaccounted||0)+' UNACCOUNTED. Source claims are not automatic engineering approvals.'));
+  if(!claims.length)return;
+  const table=createElement('table','','model-converters-workflow-table');
+  const header=createElement('tr');
+  for(const label of ['XML node','Source member','Source gap','CII gap','Coverage status','Original path'])
+    header.appendChild(createElement('th',label));
+  table.appendChild(header);
+  for(const claim of claims.slice(0,200)){
+    const tr=createElement('tr');
+    for(const value of [claim.node,claim.nodeName,claim.raw,claim.actual,claim.status,claim.sourcePath])
+      tr.appendChild(createElement('td',value==null?'—':String(value)));
+    table.appendChild(tr);
+  }
+  const wrap=createElement('div','','model-converters-workflow-table-wrap');
+  wrap.style.overflowX='auto';wrap.appendChild(table);parent.appendChild(wrap);
+}
+
+function downloadSavedDiagnostic(panel,report,status) {
+  const button=createElement('button','Download saved audit JSON (historical, not current proof)');
+  button.type='button';button.dataset.action='download-restraint-audit-saved-json';
+  button.addEventListener('click',()=>{
+    try {
+      const payload={...report,exportStatus:'SAVED_DIAGNOSTIC_ONLY',
+        exportNotice:'Saved historical evidence; current source/configuration/output identity NOT revalidated. No engineering release authority.'};
+      downloadTextFile('xml-cii-restraint-audit-SAVED-DIAGNOSTIC.json',
+        JSON.stringify(payload,null,2),'application/json;charset=utf-8');
+      status.textContent='Saved diagnostic exported. It is not a current-run verification or engineering approval.';
+    }catch(error){status.textContent='Saved audit diagnostic export failed: '+String(error?.message||error);}
+  });
+  panel.appendChild(button);
+}
+
 function downloadButton(panel,label,kind,report,stateRef,status,initial,isCurrentAudit) {
   const button=createElement('button',label);button.type='button';
   button.dataset.action='download-restraint-audit-'+kind;
@@ -92,6 +131,8 @@ export function renderRestraintAuditPanel(parent,{stateRef,isCurrentAudit=curren
   panel.appendChild(createElement('p','Saved source → rule → XML → CII evidence. Audit downloads contain private selected source values.'));
   for(const [kind,label] of [['json','Download audit JSON'],['csv','Download audit CSV'],['html','Download readable audit']])
     downloadButton(panel,label,kind,report,stateRef,status,initial,isCurrentAudit);
+  downloadSavedDiagnostic(panel,report,status);
+  renderSourceGapRows(panel,report);
   const search=createElement('input');search.type='search';search.placeholder='Search node, source member, field or rule';
   search.setAttribute('aria-label','Search restraint audit');panel.appendChild(search);
   const body=createElement('div'),rows=restraintAuditRows(report);panel.appendChild(body);

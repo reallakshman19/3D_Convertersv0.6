@@ -37,6 +37,15 @@ export function downloadTextFile(name, text, mime = 'text/plain;charset=utf-8') 
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = name || 'xml-cii-2019-output.txt';
-  anchor.click();
-  URL.revokeObjectURL(url);
+  // Attach the anchor for browsers that disallow detached downloads.
+  // Do not revoke the Blob URL in the same task as click(): some browsers
+  // cancel the pending download before consuming the Blob.
+  anchor.style.display = 'none';
+  (document.body || document.documentElement)?.appendChild(anchor);
+  try { anchor.click(); }
+  finally {
+    const cleanup = () => { anchor.remove?.(); URL.revokeObjectURL(url); };
+    if (typeof setTimeout === 'function') setTimeout(cleanup, 30000);
+    else cleanup();
+  }
 }

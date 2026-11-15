@@ -2,6 +2,7 @@
 import {digestUtf8,digestCanonical} from '../../contracts/gc-pw-v1/contract.mjs';
 import {activeRestraintRecords,recordActiveRestraintStage} from './xml-cii-active-restraint-journal.js';
 import {verifyRecordedRestraintFields} from './xml-cii-restraint-audit-verify.js';
+import {reconcileActiveRestraintSourceGaps} from './xml-cii-active-restraint-source-coverage.js';
 
 export async function activeAuditJobIdentity(job) {
   const projection={...job,supportConfigJson:JSON.parse(job.supportConfigJson||'{}')};
@@ -23,13 +24,13 @@ function validateSelectedSources(journal) {
   }
 }
 
-async function sealJournal(journal,records) {
+async function sealJournal(journal,records,sourceGapCoverage) {
   const [xmlSha256,jsonSha256,configSha256]=await Promise.all([
     digestUtf8(journal.sourceText),digestUtf8(journal.stagedJsonText),digestUtf8(journal.configJson)]);
   const stages=await Promise.all(journal.stages.map(async({xmlText,...stage})=>
     ({...stage,xmlSha256:await digestUtf8(xmlText)})));
   const recorded={schema:journal.schema,producer:'active-v06-existing-pipeline',privateOwnerLocalOnly:true,
-    basis:{xmlSha256,jsonSha256,configSha256},stages,events:journal.events,records};
+    basis:{xmlSha256,jsonSha256,configSha256},stages,events:journal.events,records,sourceGapCoverage};
   return {...recorded,auditSha256:await digestCanonical(recorded)};
 }
 
@@ -37,20 +38,27 @@ export async function finishActiveRestraintAudit(journal,result) {
   if(!journal)return {schema:'XML229.RestraintAuditResult.v1',status:'NOT_RECORDED',
     reason:'The active enrichment did not record its decisions.',records:[]};
   if(result.enrichedText)recordActiveRestraintStage(journal,'native-engine-enrichment',result.enrichedText);
-  let records=activeRestraintRecords(journal),errors=[];
+  let records=activeRestraintRecords(journal),errors=[],sourceGapCoverage=null;
   try {
     validateSelectedSources(journal);
     if(result.ciiInputSource==='topofix')throw Error('ACTIVE_AUDIT_TOPOFIX_RECONCILIATION_NOT_QUALIFIED');
     if(result.ciiText)({records,errors}=verifyRecordedRestraintFields(records,{
       ciiText:result.ciiText,nativeXmlText:journal.stages.at(-1).xmlText}));
+    sourceGapCoverage=reconcileActiveRestraintSourceGaps({
+      stagedJsonText:journal.stagedJsonText,originalRows:journal.original,records});
+    if(result.ciiText&&sourceGapCoverage.summary.unaccounted)
+      errors.push({code:'ACTIVE_AUDIT_SOURCE_GAP_UNACCOUNTED',
+        count:sourceGapCoverage.summary.unaccounted,
+        message:'Original staged support gap claims lack exact source-member-to-CII verification.'});
   }catch(error){errors.push({code:String(error.message)});}
-  const recorded=await sealJournal(journal,records);
+  const recorded=await sealJournal(journal,records,sourceGapCoverage);
   const failed=records.filter(row=>result.ciiText&&row.status!=='VERIFIED').length;
   const provenanceGaps=records.filter(row=>row.after&&(!row.originalTarget||row.source.kind==='pipeline-stage')).length;
   return {schema:'XML229.RestraintAuditResult.v1',privateOwnerLocalOnly:true,
     scope:'Active v0.6 restraint transformations and CII fields; observational evidence, not engineering acceptance',
-    status:errors.length||failed?'FAILED':provenanceGaps?'PARTIAL':result.ciiText?'VERIFIED':'CII_NOT_RUN',recorded,records,errors,
-    summary:{recorded:records.length,verified:records.filter(row=>row.status==='VERIFIED').length,failed,provenanceGaps},
+    status:errors.length||failed?'FAILED':provenanceGaps?'PARTIAL':result.ciiText?'VERIFIED':'CII_NOT_RUN',recorded,records,sourceGapCoverage,errors,
+    summary:{recorded:records.length,verified:records.filter(row=>row.status==='VERIFIED').length,failed,provenanceGaps,
+      sourceGaps:sourceGapCoverage?.summary||null},
     output:{ciiSha256:await digestUtf8(result.ciiText||''),enrichedSha256:await digestUtf8(result.enrichedText||'')},
     run:{mode:'active-v06-compatibility'}};
 }
@@ -70,7 +78,8 @@ export async function currentActiveRestraintAudit(stateRef,report,buildJob,norma
   if(report.recorded) {
     const {auditSha256,...recorded}=report.recorded;
     if(await digestCanonical(recorded)!==auditSha256||
-      await digestCanonical(report.records)!==await digestCanonical(recorded.records))return false;
+      await digestCanonical(report.records)!==await digestCanonical(recorded.records)||
+      await digestCanonical(report.sourceGapCoverage)!==await digestCanonical(recorded.sourceGapCoverage))return false;
   }
   const job=normalizeJob(await buildJob(initial));
   if(!job.ok||await activeAuditJobIdentity(job.job)!==report.run.requestSha256)return false;
