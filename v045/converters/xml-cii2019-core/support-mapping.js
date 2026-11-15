@@ -434,10 +434,23 @@ function supportProfileForKind(kind, config = {}) {
   return supportMapping.kindProfiles?.[normalizeSupportKind(kind)] || {};
 }
 
-function gapForSupportKind(kind, attrs, fallbackGap) {
-  const upperKind = normalizeSupportKind(kind);
-  if (upperKind !== 'LINESTOP' && upperKind !== 'LIMIT' && upperKind !== 'GUIDE') return fallbackGap;
-  return parseGapValue(attrs?.CMPSUPGAP || attrs?.CMPSUPGAP_POS || attrs?.CMPSUPGAP_PS) || fallbackGap;
+// Source-owned gap is independent of support classification. Explicit zero is
+// evidence, not absence; NODEGAP=0 is the established placeholder only when
+// the same source member supplies CMPSUPGAP.
+export function sourceSupportGap(attrs = {}) {
+  const aliases=['CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS','NODEGAP'];
+  const fields=aliases.map(key=>({key,raw:toText(attrs?.[key]).trim()})).filter(f=>f.raw!=='');
+  const parse=raw=>{
+    const match=raw.match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[Ee][+-]?\d+)?/);
+    const number=match?Number(match[0]):NaN;
+    if(!Number.isFinite(number))throw Error('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID');
+    return number;
+  };
+  const authored=fields.filter(f=>!(f.key==='NODEGAP'&&fields.some(v=>v.key==='CMPSUPGAP')&&parse(f.raw)===0));
+  if(!authored.length)return {raw:'',gap:'0',explicit:false};
+  const first=parse(authored[0].raw);
+  if(authored.some(f=>parse(f.raw)!==first))throw Error('NATIVE_PREFINAL_RESTRAINT_GAP_AMBIGUOUS');
+  return {raw:authored[0].raw,gap:String(first),explicit:true};
 }
 
 function restraintTypeUsesSupportGap(type, entry = null) {
@@ -498,12 +511,14 @@ export function restraintEntriesFromSupportKind(kind, attrs = {}, nodeElement = 
   const profile = supportProfileForKind(upperKind, config);
   const values = normalizeXmlTypes(profile.xmlTypes || config.supportKindToXmlType?.[upperKind] || []);
   const direction = resolveSupportDirectionCosines({ profile, attrs, nodeElement });
-  const gap = gapForSupportKind(upperKind, attrs, profile.gap ?? '0');
+  const sourceGap = sourceSupportGap(attrs);
+  const gap = sourceGap.gap;
   return values.map(normalizeXmlType).filter(Boolean).map((type) => createRestraintEntry({
     type,
     stiffness: profile.stiffness && profile.stiffness !== 'default' ? profile.stiffness : config.defaultStiffness,
     gap,
-    cmpSupGap: upperKind === 'LINESTOP' || upperKind === 'LIMIT' || upperKind === 'GUIDE' ? toText(attrs?.CMPSUPGAP || attrs?.CMPSUPGAP_POS || attrs?.CMPSUPGAP_PS).trim() : '',
+    cmpSupGap: sourceGap.raw,
+    sourceGapPolicy: true,
     frictionMode: profile.frictionMode || 'default',
     fixedFriction: profile.fixedFriction || '',
     supportTagMode: profile.supportTagMode || 'kind',
@@ -610,12 +625,13 @@ export function applyXmlRestraints(document, nodeElement, entries, config = {}) 
     xmlSetText(document, restraint, 'Stiffness', toText(entry?.stiffness).trim() || stiffness);
     const entryGap = toText(entry?.gap).trim();
     const usesSupportGap = restraintTypeUsesSupportGap(type, entry);
-    const gapValue = usesSupportGap && (!entryGap || Number(entryGap) === 0) && nodeSupportGap
+    const explicitSourceGap=toText(entry?.cmpSupGap).trim()!=='';
+    const gapValue = usesSupportGap && !entry?.sourceGapPolicy && !entry?.fromExistingRestraint && !explicitSourceGap && (!entryGap || Number(entryGap) === 0) && nodeSupportGap
       ? String(nodeSupportGap)
       : (entryGap || gap);
     xmlSetText(document, restraint, 'Gap', gapValue);
     xmlSetText(document, restraint, 'Friction', frictionForEntry(entry, type, friction, config));
-    const cmpSupGap = toText(entry?.cmpSupGap).trim() || (usesSupportGap ? nodeSupportGapText : '');
+    const cmpSupGap = toText(entry?.cmpSupGap).trim() || (usesSupportGap && !entry?.sourceGapPolicy && !entry?.fromExistingRestraint ? nodeSupportGapText : '');
     if (cmpSupGap) xmlSetText(document, restraint, 'CMPSUPGAP', cmpSupGap);
     const direction = entry?.fromExistingRestraint
       ? normalizeDirectionVector(entry?.direction)

@@ -107,3 +107,5 @@ test('Step 7 visible table repairs stale GT5 GUIDE rows before Run',async()=>{
   assert.deepEqual([row.priority,row.kind,row.xmlTypes,row.directionMode,row.gap,row.frictionMode,row.enabled],
     [140,'GUIDE','GUI','pipe-normal','0','sentinel',true]);
 });
+
+import './xml229-all-mapper-source-gap.test.mjs';

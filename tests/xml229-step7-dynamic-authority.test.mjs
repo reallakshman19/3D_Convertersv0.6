@@ -92,7 +92,9 @@ test('owner GT5/GT policy repairs old persisted wrong rows and preserves unrelat
           [priority,'all',field,match,pattern,'GUIDE',true]);
       }
       if(cfg.supportMapping)assert.equal(current.rules.find(r=>r.id==='custom-unrelated').priority,7);
-      assert.deepEqual(migrate({...cfg,supportMapping:current}),current);
+      const normalized=migrate({...cfg,supportMapping:current});
+      assert.deepEqual(migrate({...cfg,supportMapping:normalized}),normalized);
+      assert.deepEqual(normalized.rules,current.rules);
       assert.deepEqual(current.kindProfiles.GUIDE.xmlTypes,['GUI']);
       assert.equal(current.kindProfiles.GUIDE.directionMode,'pipe-normal');
       assert.equal(current.kindProfiles.GUIDE.frictionMode,'sentinel');
@@ -130,7 +132,7 @@ test('owner GT5/GT policy repairs old persisted wrong rows and preserves unrelat
 
 test('permanent builtin GT5 row cannot be persisted as REST through table edit or deletion',()=>{
   const cfg={supportMapping:rootConfig({})};
-  const restBefore=JSON.stringify(cfg.supportMapping.kindProfiles.REST);
+  const restBefore=JSON.stringify(rootConfig(cfg).kindProfiles.REST);
   applySupportMappingRowPatch(cfg,'builtin-gt5-mds',{kind:'REST',priority:999,enabled:false});
   let row=cfg.supportMapping.rules.find(r=>r.id==='builtin-gt5-mds');
   assert.deepEqual([row.kind,row.priority,row.enabled],['GUIDE',140,true]);
