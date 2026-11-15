@@ -29,3 +29,6 @@ Changed-file ledger:
 - docs/converters/xml-cii2019-core/support-mapping-legacy.js original 33b36bd60d0f912cd0405b2cedddf94d606fc9ab
 
 EXACT_NEXT_ACTION: add exact-source native regression and dynamic named/wildcard/priority JS-Python tests; run established CI without workflow edits. Do not merge.
+
+## Executable verification checkpoint
+Added tests/xml229-step7-dynamic-authority.test.mjs (literal arbitrary named fields, wildcard, scopes, matches, priority, saved edits, Preview and Python parity); tests/xmlcii-ps4131-dynamic-step7-native.test.mjs (exact committed full PSI-02/STF, four configurations, native slots). Existing HOLD gate imports these plus existing owner precedence and Step78 tests; no workflow edits. No original tests weakened. Prior reproduction test remains unchanged on its separate branch. Actual PC config still unavailable. Exact-head test execution NOT_RUN at commit time.
