@@ -92,3 +92,6 @@ test('new native owner audit UI is mirrored and does not replace native proof',a
   assert.match(candidate,/reconcileXml229ActualCiiAgainstFinal/);
   assert.doesNotMatch(candidate,/executeStandaloneFallbackCandidate|xml229NativeFinalPacket:\s*null/);
 });
+
+// Evidence-only PS4131 qualification on this isolated branch.
+import './xmlcii-ps4131-original-source-proof.test.mjs';
