@@ -20,7 +20,7 @@ class Element {
 }
 const find=(node,predicate)=>predicate(node)?node:node.children.map(n=>find(n,predicate)).find(Boolean);
 
-async function fixture() {
+async function fixture(panelOptions={}) {
   const downloads=[],control={current:true,onRead:null};
   const synthetic=exports=>new vm.SyntheticModule(Object.keys(exports),function(){
     for(const [key,value] of Object.entries(exports))this.setExport(key,value);
@@ -49,7 +49,7 @@ async function fixture() {
       observed:{gap:25,blockIndex:46,slotIndex:2,line:8166}}]};
   const stateRef={session:{},current:{sourceText:'XML',stagedJsonText:'[]',supportConfigJson:'{}',options:{},
     result:{ok:true,ciiText:'actual cii',restraintAudit:report}}};
-  const root=new Element('section');module.namespace.renderRestraintAuditPanel(root,{stateRef});
+  const root=new Element('section');module.namespace.renderRestraintAuditPanel(root,{stateRef,...panelOptions});
   return {api:module.namespace,root,report,stateRef,control,downloads};
 }
 
@@ -85,4 +85,16 @@ test('old runs explicitly show missing recorded evidence',async()=>{
   f.stateRef.current.result={ok:true,ciiText:'old'};f.api.renderRestraintAuditPanel(root,{stateRef:f.stateRef});
   assert.ok(root.textContent.includes('No saved restraint decisions'));
   assert.equal(find(root,n=>!!n.dataset.action),undefined);
+});
+
+test('stale current-audit downloads stay blocked while explicitly labelled diagnostic JSON is available',async()=>{
+  const f=await fixture({inspectCurrency:async()=>({current:false,code:'RUN_INPUTS_CHANGED',changed:['stagedJsonText']})});
+  await find(f.root,n=>n.dataset.action==='download-restraint-audit-json').fire('click');
+  assert.equal(f.downloads.length,0);assert.match(f.root.textContent,/RUN_INPUTS_CHANGED: stagedJsonText/);
+  await find(f.root,n=>n.dataset.action==='download-recorded-audit-diagnostic').fire('click');
+  assert.equal(f.downloads.length,1);
+  const payload=JSON.parse(f.downloads[0][1]);assert.equal(payload.diagnosticOnly,true);
+  assert.equal(payload.status,'RECORDED_DIAGNOSTIC');assert.equal(payload.currency.current,false);
+  assert.equal(payload.currency.code,'RUN_INPUTS_CHANGED');
+  assert.equal(payload.recordedReport.records[0].target.nodeNumber,'3610');
 });

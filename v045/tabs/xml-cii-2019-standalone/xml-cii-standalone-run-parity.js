@@ -273,6 +273,11 @@ export async function enrichStandaloneXmlForRun(job, extraOptions = {}) {
     const parity = await import(PARITY_MODULE_URL.href);
     const options = { ...standaloneParityOptions(job.supportConfigJson, job.options || {}), ...extraOptions };
     out.restraintAuditJournal=createActiveRestraintJournal(job);
+    try {
+      const {inspectActiveSourceExpectations}=await import('./xml-cii-active-source-expectations.js');
+      out.restraintAuditJournal.sourceExpectations=inspectActiveSourceExpectations(
+        out.restraintAuditJournal,parseConfig(options.supportConfigJson));
+    }catch(error){out.restraintAuditJournal.sourceExpectations={sources:[],error:'SOURCE_EXPECTATIONS_NOT_RECORDED: '+String(error.message)};}
     options._restraintAuditJournal=out.restraintAuditJournal;
     const enriched = await parity.enrichXmlForCii2019(sourceText, text(job.stagedJsonText), options);
     const config = parseConfig(options.supportConfigJson);

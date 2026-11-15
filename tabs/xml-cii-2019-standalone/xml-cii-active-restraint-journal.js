@@ -1,5 +1,6 @@
 /** Observations of the existing v0.6 pipeline; never writes engineering XML. */
 import {inventoryRestraintAudit,restraintAuditConfig} from './xml-cii-restraint-audit.js';
+import {inventoryActiveSourceSupports} from './xml-cii-active-restraint-coverage.js';
 
 const copy=value=>JSON.parse(JSON.stringify(value));
 const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -28,6 +29,7 @@ export function activeAuditNode(node) {
 export function createActiveRestraintJournal(job) {
   return {schema:'XMLCII.ActiveRestraintJournal.v1',sourceText:job.sourceText,
     stagedJsonText:job.stagedJsonText||'',configJson:job.supportConfigJson||'{}',
+    sourceCensus:inventoryActiveSourceSupports(job.stagedJsonText),
     original:inventoryRestraintAudit(parse(job.sourceText)),stages:[],events:[]};
 }
 

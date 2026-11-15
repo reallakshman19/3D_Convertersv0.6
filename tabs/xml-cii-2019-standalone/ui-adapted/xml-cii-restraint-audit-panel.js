@@ -1,5 +1,5 @@
 import {createElement,downloadTextFile} from './xml-cii-adapted-dom.js';
-import {restraintAuditRows,restraintAuditCsv,restraintAuditHtml} from '../xml-cii-restraint-audit-export.js';
+import {restraintAuditRows,restraintAuditCoverageRows,restraintAuditCsv,restraintAuditHtml} from '../xml-cii-restraint-audit-export.js';
 import {digestUtf8} from '../../../contracts/gc-pw-v1/contract.mjs';
 import {getXml229VerifiedEngineeringEntry} from '../integration/xml229-engineering-basis-authority.mjs';
 import {captureXml229NativeRunContext} from './xml229-native-run-context.mjs';
@@ -54,24 +54,53 @@ function renderRows(parent,rows) {
   parent.append(createElement('p',`Showing ${Math.min(rows.length,200)} of ${rows.length} field records. Downloads include all records.`),scroll);
 }
 
-function downloadButton(panel,label,kind,report,stateRef,status,initial,isCurrentAudit) {
+const currencyMessage=check=>`${check.code}${check.changed?.length?': '+check.changed.join(', '):''}${check.reason?' — '+check.reason:''}`;
+
+function downloadButton(panel,label,kind,report,stateRef,status,initial,isCurrentAudit,inspectCurrency) {
   const button=createElement('button',label);button.type='button';
   button.dataset.action='download-restraint-audit-'+kind;
   button.addEventListener('click',async()=>{
     button.disabled=true;
     try {
-      if(!same(initial,snapshot(stateRef.current))||!await isCurrentAudit(stateRef,report))throw new Error('stale');
+      if(!same(initial,snapshot(stateRef.current)))throw new Error('STALE_PANEL: inputs changed after rendering');
+      const check=inspectCurrency?await inspectCurrency(stateRef,report):{current:await isCurrentAudit(stateRef,report),code:'STALE_CURRENT_REVIEW'};
+      if(!check.current)throw new Error(currencyMessage(check));
       const text=kind==='json'?JSON.stringify(report,null,2):kind==='csv'?restraintAuditCsv(report):restraintAuditHtml(report);
       const mime=kind==='json'?'application/json;charset=utf-8':kind==='csv'?'text/csv;charset=utf-8':'text/html;charset=utf-8';
       downloadTextFile('xml-cii-restraint-audit.'+kind,text,mime);
       status.textContent='Audit downloaded for the recorded conversion.';
-    }catch{status.textContent='Audit is stale or unavailable. Run again for the current source and Final review.';}
+    }catch(error){status.textContent='Audit is stale or unavailable: '+String(error.message)+'. Current-audit download blocked. Recorded field matches do not verify source completeness.';}
     finally{button.disabled=false;}
   });
   panel.appendChild(button);
 }
 
-export function renderRestraintAuditPanel(parent,{stateRef,isCurrentAudit=currentRestraintAudit}) {
+function diagnosticButton(panel,stateRef,report,status,inspectCurrency) {
+  const button=createElement('button','Download recorded diagnostic JSON');button.type='button';
+  button.dataset.action='download-recorded-audit-diagnostic';
+  button.addEventListener('click',async()=>{
+    button.disabled=true;
+    try {
+      const currency=await inspectCurrency(stateRef,report);
+      const payload={schema:'XMLCII.RecordedAuditDiagnostic.v1',diagnosticOnly:true,status:'RECORDED_DIAGNOSTIC',
+        warning:'Recorded evidence only. This download does not certify current inputs, complete transfer or engineering acceptance.',
+        currency,recordedReport:report};
+      downloadTextFile('xml-cii-recorded-audit-diagnostic.json',JSON.stringify(payload,null,2),'application/json;charset=utf-8');
+      status.textContent='Recorded diagnostic downloaded. Currency: '+currencyMessage(currency)+'.';
+    }catch(error){status.textContent='Diagnostic download failed: '+String(error.message);}
+    finally{button.disabled=false;}
+  });
+  panel.appendChild(button);
+}
+
+function coverageSummary(panel,report) {
+  if(!report.coverage)return;
+  const {summary,status}=report.coverage;
+  panel.appendChild(createElement('p',`Source coverage: ${status}. ${summary.supportOccurrences} source support occurrences; ${summary.accounted} accounted; ${summary.missing} missing restraints; ${summary.unresolved} unresolved; ${summary.disabled} disabled. See Source coverage rows and diagnostics.`));
+  panel.appendChild(createElement('p','CII field verification checks recorded restraints only. Source coverage checks the original JSON independently against the consumed run policy.'));
+}
+
+export function renderRestraintAuditPanel(parent,{stateRef,isCurrentAudit=currentRestraintAudit,inspectCurrency=null}) {
   const panel=createElement('section'),title=createElement('h3','Restraint enrichment audit');
   panel.dataset.restraintAudit='true';panel.appendChild(title);parent.appendChild(panel);
   const report=restraintAuditFromResult(stateRef.current.result);
@@ -82,19 +111,22 @@ export function renderRestraintAuditPanel(parent,{stateRef,isCurrentAudit=curren
   const status=createElement('p',`Saved run status: ${report.status}. ${report.scope||'Source XML/JSON restraints'}.`);
   status.setAttribute('role','status');panel.appendChild(status);
   if(report.summary)panel.appendChild(createElement('p',
-    `${report.summary.verified} of ${report.summary.recorded} recorded restraints verified; ${report.summary.failed} failed.`));
+    `${report.summary.verified} of ${report.summary.recorded} recorded restraints verified; ${report.summary.failed} failed. CII field agreement only.`));
+  coverageSummary(panel,report);
   for(const error of report.errors||[])panel.appendChild(createElement('p',error.code||'Audit verification failed.'));
   const initial=snapshot(stateRef.current);
-  isCurrentAudit(stateRef,report).then(current=>{
-    if(same(initial,snapshot(stateRef.current))&&!current)
-      status.textContent='STALE — this audit belongs to an earlier source, configuration, Final review or output.';
+  const inspect=inspectCurrency|| (async(ref,saved)=>({current:await isCurrentAudit(ref,saved),code:'STALE_CURRENT_REVIEW'}));
+  inspect(stateRef,report).then(check=>{
+    if(same(initial,snapshot(stateRef.current))&&!check.current)
+      status.textContent='STALE — '+currencyMessage(check)+'. Recorded field matches are historical; use the diagnostic download to investigate.';
   }).catch(()=>{status.textContent='Audit currency could not be verified.';});
   panel.appendChild(createElement('p','Saved source → rule → XML → CII evidence. Audit downloads contain private selected source values.'));
   for(const [kind,label] of [['json','Download audit JSON'],['csv','Download audit CSV'],['html','Download readable audit']])
-    downloadButton(panel,label,kind,report,stateRef,status,initial,isCurrentAudit);
+    downloadButton(panel,label,kind,report,stateRef,status,initial,isCurrentAudit,inspectCurrency);
+  if(inspectCurrency)diagnosticButton(panel,stateRef,report,status,inspectCurrency);
   const search=createElement('input');search.type='search';search.placeholder='Search node, source member, field or rule';
   search.setAttribute('aria-label','Search restraint audit');panel.appendChild(search);
-  const body=createElement('div'),rows=restraintAuditRows(report);panel.appendChild(body);
+  const body=createElement('div'),rows=[...restraintAuditCoverageRows(report),...restraintAuditRows(report)];panel.appendChild(body);
   const update=()=>{const query=search.value?.trim().toLowerCase()||'';
     renderRows(body,query?rows.filter(row=>JSON.stringify(row).toLowerCase().includes(query)):rows);};
   search.addEventListener('input',update);update();

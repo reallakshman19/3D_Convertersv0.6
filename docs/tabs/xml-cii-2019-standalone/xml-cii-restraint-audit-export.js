@@ -31,17 +31,28 @@ export function restraintAuditRows(report) {
   })));
 }
 
+export function restraintAuditCoverageRows(report) {
+  return (report.coverage?.sources||[]).map(source=>({
+    recordKind:'SOURCE_COVERAGE',field:'Source coverage',status:source.status,source:source.name,sourcePath:source.path,
+    node:(source.candidates||[]).map(row=>row.target.nodeNumber).join(' | '),branch:source.branch,
+    raw:source.fields,authority:report.coverage.policyBasis,ruleId:source.decision?.rule?.id||'',
+    after:source.kind||'',sourceMembers:[{path:source.path,name:source.name,fields:source.fields}],reason:source.reason||'',
+    expected:source.candidates||[],coverageStatus:report.coverage.status,
+  }));
+}
+
 const headers=['node','branch','nodeName','disposition','status','source','sourcePath','corroboratingMember','corroboratingPath',
   'field','sourceAttribute','raw','authority','ruleId','rule','decision','before','after','actual',
   'retainedNode','mapping','ciiBlock','ciiSlot','ciiLine','coordinateEvidence',
-  'attachmentPath','attachmentName','attachmentDisposition','attachmentAuthority','sourceMembers'];
+  'attachmentPath','attachmentName','attachmentDisposition','attachmentAuthority','sourceMembers',
+  'recordKind','reason','expected','coverageStatus'];
 const csv=v=>{
   const raw=str(v),numeric=/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[Ee][+-]?\d+)?$/.test(raw);
   const safe=/^[=+\-@\t\r]/.test(raw)&&!numeric?"'"+raw:raw;
   return '"'+safe.replace(/"/g,'""')+'"';
 };
 export function restraintAuditCsv(report) {
-  return '\uFEFF'+[headers.join(','),...restraintAuditRows(report)
+  return '\uFEFF'+[headers.join(','),...[...restraintAuditRows(report),...restraintAuditCoverageRows(report)]
     .map(row=>headers.map(key=>csv(row[key])).join(','))].join('\r\n')+'\r\n';
 }
 
@@ -63,7 +74,8 @@ export function restraintAuditHtml(report) {
   const recorded=report.recorded||report;
   const manifest={status:report.status,scope:report.scope||'restraints',basis:recorded.basis,
     auditSha256:recorded.auditSha256,output:report.output,run:report.run,summary:report.summary,
-    mode:report.mode,historicalRunProvenance:report.historicalRunProvenance,attachmentDelegation:recorded.attachmentDelegation};
+    mode:report.mode,historicalRunProvenance:report.historicalRunProvenance,attachmentDelegation:recorded.attachmentDelegation,
+    sourceCoverage:report.coverage?{status:report.coverage.status,summary:report.coverage.summary}:null};
   const records=report.records?.length?report.records:recorded.records||[];
   return '<!doctype html><html lang="en"><meta charset="utf-8"><title>Restraint enrichment audit</title>'+
     '<style>body{font:14px system-ui;margin:24px auto;max-width:1200px;padding:0 16px;color:#172033}article{margin:24px 0;padding:16px;border:1px solid #b8c3d3}table{border-collapse:collapse;width:100%}'+
@@ -71,6 +83,7 @@ export function restraintAuditHtml(report) {
     'pre{white-space:pre-wrap;overflow-wrap:anywhere}td{overflow-wrap:anywhere}h1{font-size:24px}</style>'+
     '<h1>Restraint enrichment audit</h1><p>Private owner-local evidence from the recorded conversion. '+
     'Verification applies to the identified input and output bytes.</p><pre>'+html(JSON.stringify(manifest,null,2))+'</pre>'+
+    '<h2>Source support coverage</h2><p>Independent source census; surviving CII field agreement does not prove complete transfer.</p><pre>'+html(JSON.stringify(report.coverage||{status:'NOT_RECORDED'},null,2))+'</pre>'+
     records.map(record=>recordHtml(record,report)).join('')+
     '<h2>Source matching context</h2><pre>'+html(JSON.stringify(recorded.matching||{},null,2))+'</pre>'+
     '<details><summary>Source resolutions and member evaluations</summary><pre>'+html(JSON.stringify({

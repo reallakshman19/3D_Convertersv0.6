@@ -54,7 +54,7 @@ function memberAttributes(member) {
   return safeObject(member?.raw?.attributes || member?.attributes || member?.capturedFields);
 }
 
-function supportKindFromMember(member, config = {}, onDecision) {
+export function supportKindFromMember(member, config = {}, onDecision) {
   const captured = safeObject(member?.capturedFields);
   const attrs = memberAttributes(member);
   // Owner rule (RCA-04): NODETYPE first, then the Step 7 support table.
