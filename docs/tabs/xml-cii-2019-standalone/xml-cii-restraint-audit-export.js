@@ -31,6 +31,18 @@ export function restraintAuditRows(report) {
   })));
 }
 
+export function restraintAuditSourceGapRows(report) {
+  return (report?.sourceGapCoverage?.claims||[]).map(claim=>({
+    node:(claim.targetNodes||[]).join(' | '),branch:claim.branch,nodeName:claim.name,
+    disposition:'SOURCE_GAP_CENSUS',status:claim.status,source:'Original staged JSON',
+    sourcePath:claim.path,field:claim.field,sourceAttribute:claim.field,raw:claim.raw,
+    authority:'explicit-source-gap-claim',before:'',after:claim.gapMm,
+    actual:claim.cii?.gap??null,ciiBlock:claim.cii?.blockIndex??'',
+    ciiSlot:claim.cii?.slotIndex??'',ciiLine:claim.cii?.line??'',
+    ruleId:'source-census-no-inferred-classification',
+  }));
+}
+
 const headers=['node','branch','nodeName','disposition','status','source','sourcePath','corroboratingMember','corroboratingPath',
   'field','sourceAttribute','raw','authority','ruleId','rule','decision','before','after','actual',
   'retainedNode','mapping','ciiBlock','ciiSlot','ciiLine','coordinateEvidence',
@@ -41,7 +53,7 @@ const csv=v=>{
   return '"'+safe.replace(/"/g,'""')+'"';
 };
 export function restraintAuditCsv(report) {
-  return '\uFEFF'+[headers.join(','),...restraintAuditRows(report)
+  return '\uFEFF'+[headers.join(','),...[...restraintAuditRows(report),...restraintAuditSourceGapRows(report)]
     .map(row=>headers.map(key=>csv(row[key])).join(','))].join('\r\n')+'\r\n';
 }
 
@@ -63,7 +75,8 @@ export function restraintAuditHtml(report) {
   const recorded=report.recorded||report;
   const manifest={status:report.status,scope:report.scope||'restraints',basis:recorded.basis,
     auditSha256:recorded.auditSha256,output:report.output,run:report.run,summary:report.summary,
-    mode:report.mode,historicalRunProvenance:report.historicalRunProvenance,attachmentDelegation:recorded.attachmentDelegation};
+    mode:report.mode,historicalRunProvenance:report.historicalRunProvenance,attachmentDelegation:recorded.attachmentDelegation,
+    sourceGapCoverageSummary:report.sourceGapCoverage?.summary||null};
   const records=report.records?.length?report.records:recorded.records||[];
   return '<!doctype html><html lang="en"><meta charset="utf-8"><title>Restraint enrichment audit</title>'+
     '<style>body{font:14px system-ui;margin:24px auto;max-width:1200px;padding:0 16px;color:#172033}article{margin:24px 0;padding:16px;border:1px solid #b8c3d3}table{border-collapse:collapse;width:100%}'+
@@ -72,6 +85,13 @@ export function restraintAuditHtml(report) {
     '<h1>Restraint enrichment audit</h1><p>Private owner-local evidence from the recorded conversion. '+
     'Verification applies to the identified input and output bytes.</p><pre>'+html(JSON.stringify(manifest,null,2))+'</pre>'+
     records.map(record=>recordHtml(record,report)).join('')+
+    '<h2>Original staged JSON gap-source census</h2>'+
+    '<p>Every in-scope unverified claim is a coverage HOLD, not an approved CII restraint.</p>'+
+    '<table><tr>'+['Source','XML node','Raw gap','Status','Source path']
+      .map(k=>'<th>'+html(k)+'</th>').join('')+'</tr>'+
+    (report.sourceGapCoverage?.claims||[]).map(c=>'<tr>'+[
+      c.name,(c.targetNodes||[]).join(' | '),c.raw,c.status,c.path]
+      .map(v=>'<td>'+html(v)+'</td>').join('')+'</tr>').join('')+'</table'+ '>' +
     '<h2>Source matching context</h2><pre>'+html(JSON.stringify(recorded.matching||{},null,2))+'</pre>'+
     '<details><summary>Source resolutions and member evaluations</summary><pre>'+html(JSON.stringify({
       resolutions:recorded.resolutions,evaluations:recorded.evaluations},null,2))+'</pre></details>'+
