@@ -190,9 +190,28 @@ function mdsSeedEnabled(row,config) {
   return group.aliases.some(a=>toText(a).toUpperCase().replace(/\*/g,'')===row.pattern);
 }
 
+// Owner 15 Nov 2026: these four built-in Step 7 rows are permanent.
+const GT_GUIDE_PRIORITIES = Object.freeze({
+  'builtin-gt5-cmp':130, 'builtin-gt5-mds':140,
+  'builtin-gt5-text':150, 'builtin-gt-mds':160,
+});
+
+function enforceOwnerGtGuideRows(rows) {
+  const canonical=new Map(DEFAULT_RULES.filter(r=>Object.hasOwn(GT_GUIDE_PRIORITIES,r.id))
+    .map(r=>[r.id,{...r,priority:GT_GUIDE_PRIORITIES[r.id],source:'all',enabled:true,kind:'GUIDE'}]));
+  const seen=new Set();
+  const corrected=rows.map(rule=>{
+    const fixed=canonical.get(rule?.id);
+    if(!fixed)return rule;
+    seen.add(rule.id);
+    return {...rule,...fixed};
+  });
+  return [...corrected,...[...canonical.values()].filter(r=>!seen.has(r.id))];
+}
+
 function completeStep7Rules(rows,config) {
   const ids=new Set(rows.map(r=>toText(r?.id)));
-  return [...rows,...DEFAULT_STEP7_MDS_ROWS.filter(r=>!ids.has(r.id)&&mdsSeedEnabled(r,config))];
+  return enforceOwnerGtGuideRows([...rows,...DEFAULT_STEP7_MDS_ROWS.filter(r=>!ids.has(r.id)&&mdsSeedEnabled(r,config))]);
 }
 
 export function defaultSupportKindProfiles(config = {}) {

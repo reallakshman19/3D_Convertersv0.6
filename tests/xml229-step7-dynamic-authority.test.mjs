@@ -23,7 +23,7 @@ const cases=[
  [{OTHER:'ABCD'},conf([r('disabled','OTHER','equals','ABCD','REST',0,{enabled:false}),r('live','OTHER','contains','BC','GUIDE',8)]),'GUIDE','live'],
  [{OTHER:'ABCD'},conf([r('wrong-scope','OTHER','equals','ABCD','REST',0,{source:'rvm'}),r('live','OTHER','equals','ABCD','GUIDE',8)]),'GUIDE','live'],
  [{MDSSUPPTYPE:'ST570',SUPPORT_KIND:'REST'}, {},'LINESTOP','standalone-mds-st-linestop'],
- [{MDSSUPPTYPE:'GT570',SUPPORT_KIND:'REST'},conf([r('builtin-gt5-mds','MDSSUPPTYPE','startsWith','GT5','REST',11)]),'REST','builtin-gt5-mds'],
+ [{MDSSUPPTYPE:'GT570',SUPPORT_KIND:'REST'},conf([r('builtin-gt5-mds','MDSSUPPTYPE','startsWith','GT5','REST',11)]),'GUIDE','builtin-gt5-mds'],
  [{DTXR:'LINE STOP',SUPPORT_KIND:'REST'}, {},'LINESTOP','builtin-user-limit']
 ];
 test('dynamic named/wildcard/scoped/prioritized fields agree in root, served, v045 and Python',()=>{
@@ -70,4 +70,60 @@ test('ties and NODETYPE conflicts fail closed; object values are not coerced int
     assert.throws(()=>engine.governedSupportKind({FIELD:'X',NODETYPE:'9'},conf([r('a','FIELD','equals','X','GUIDE')])),/TYPE_KIND_CONFLICT/);
     assert.equal(engine.governedSupportKind({NESTED:{FIELD:'X'}},conf([r('a','*','contains','X','GUIDE')])).kind,'');
   }
+});
+
+test('owner GT5/GT policy repairs old persisted wrong rows and preserves unrelated priorities',()=>{
+  const wanted=[
+    ['builtin-gt5-cmp',130,'CMPSUPTYPE','startsWith','GT5'],
+    ['builtin-gt5-mds',140,'MDSSUPPTYPE','startsWith','GT5'],
+    ['builtin-gt5-text',150,'SPRE,SKEY,NAME,DESCRIPTION,DESC','contains','GT5'],
+    ['builtin-gt-mds',160,'MDSSUPPTYPE','startsWith','GT']
+  ];
+  const stale=conf([...wanted.map(([id,priority,field,match,pattern])=>
+    r(id,field,match,pattern,'REST',priority+100,{enabled:false})),
+    r('custom-unrelated','EXTRA_FIELD','equals','XYZ','LINESTOP',7)]);
+  // Missing builtin rows must also be restored on migration.
+  for(const cfg of [stale,conf([stale.supportMapping.rules.at(-1)]),{}]){
+    for(const migrate of [rootConfig,legacyConfig]){
+      const current=migrate(cfg);
+      for(const [id,priority,field,match,pattern] of wanted){
+        const row=current.rules.find(r=>r.id===id);
+        assert.deepEqual([row.priority,row.source,row.field,row.match,row.pattern,row.kind,row.enabled],
+          [priority,'all',field,match,pattern,'GUIDE',true]);
+      }
+      if(cfg.supportMapping)assert.equal(current.rules.find(r=>r.id==='custom-unrelated').priority,7);
+      assert.deepEqual(migrate({...cfg,supportMapping:current}),current);
+      assert.deepEqual(current.kindProfiles.GUIDE.xmlTypes,['GUI']);
+      assert.equal(current.kindProfiles.GUIDE.directionMode,'pipe-normal');
+      assert.equal(current.kindProfiles.GUIDE.frictionMode,'sentinel');
+    }
+    for(const [attrs,id] of [
+      [{CMPSUPTYPE:'GT571'},'builtin-gt5-cmp'],
+      [{MDSSUPPTYPE:'GT570'},'builtin-gt5-mds'],
+      [{SPRE:'/MDS/GT571-80mm'},'builtin-gt5-text'],
+      [{MDSSUPPTYPE:'GT01'},'builtin-gt-mds']]){
+      for(const engine of [root,legacy,served]){
+        let d;
+        assert.equal(engine.governedSupportKind({...attrs,SUPPORT_KIND:'REST'},cfg,undefined,v=>d=v).kind,'GUIDE');
+        assert.equal(d.rule.id,id);
+      }
+    }
+  }
+  // Test/Save cannot resurrect the known invalid built-in mapping.
+  for(const mapper of [rootMapper,legacyMapper]){
+    const once=mapper({supportConfigJson:JSON.stringify(stale)});
+    const twice=mapper({supportConfigJson:once.supportConfigJson});
+    for(const [id,p] of wanted){
+      const row=JSON.parse(twice.supportConfigJson).supportMapping.rules.find(r=>r.id===id);
+      assert.equal(row.kind,'GUIDE');assert.equal(row.priority,p);assert.equal(row.enabled,true);
+    }
+  }
+  // A higher-priority unrelated custom rule is still dynamically evaluated.
+  const independent={...stale,supportMapping:{...stale.supportMapping,rules:[...stale.supportMapping.rules,
+    r('explicit-owner','MDSSUPPFUNC','equals','ST','LINESTOP',1)]}};
+  assert.equal(root.governedSupportKind({MDSSUPPFUNC:'ST',MDSSUPPTYPE:'GT570'},independent).kind,'LINESTOP');
+  const script=['import sys,json','sys.path.insert(0,"converters/scripts")','import xml229_support_type_mapper as m','c=json.load(sys.stdin)',
+    'print(json.dumps([[r["id"],r["priority"],r["kind"]] for r in m.table_rules(c) if r["id"] in m._GT_GUIDE_PRIORITIES]))'].join('\n');
+  const rows=JSON.parse(execFileSync(nativeTestPython,['-c',script],{input:JSON.stringify(stale),encoding:'utf8'}));
+  assert.deepEqual(rows,wanted.map(([id,p])=>[id,p,'GUIDE']));
 });

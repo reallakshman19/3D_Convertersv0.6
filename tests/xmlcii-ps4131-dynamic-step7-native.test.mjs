@@ -47,7 +47,7 @@ function baseConfig(){
 function caseConfig(mode){
   const cfg=baseConfig();
   if(mode==='audit-signature-reconstruction'){
-    // Reconstruct the observed GT5 rule only; not the unavailable PC config.
+    // Reconstruct the invalid saved GT5 rule. Owner's permanent policy must repair it.
     cfg.supportMapping.rules=cfg.supportMapping.rules.map(r=>r.id==='builtin-gt5-mds'?{...r,kind:'REST'}:r);
   }
   if(mode==='arbitrary-field-control'){
@@ -137,10 +137,11 @@ for(const mode of ['shipped-table','audit-signature-reconstruction','mapper-defa
     assert.equal(receipt.engineInput.config.enabled,true);
     assert.ok(receipt.native.targetSlots.length>0,'No native CII slot observed at target node numbers');
     if(mode==='audit-signature-reconstruction'){
-      assert.deepEqual(receipt.decisions.map(d=>d.kind),['REST','REST','LINESTOP']);
+      assert.deepEqual(receipt.decisions.map(d=>d.kind),['REST','GUIDE','LINESTOP']);
       assert.deepEqual(receipt.decisions.map(d=>d.rule),['builtin-user-rest','builtin-gt5-mds','standalone-mds-st-linestop']);
-      assert.ok(receipt.native.targetSlots.every(s=>s.typeCode!==8),'Saved GT570 REST must remain authoritative');
+      assert.ok(receipt.native.targetSlots.some(s=>s.typeCode===8),'Owner policy must repair the old saved GT570 REST mapping');
       assert.ok(receipt.native.targetSlots.some(s=>s.typeCode===9),'Visible default ST rule must generate LIM');
+      assert.deepEqual(receipt.native.targetSlots.map(s=>s.typeCode).sort((a,b)=>a-b),[8,9,14]);
     }
     if(mode==='mapper-default-control'||mode==='shipped-table'||mode==='arbitrary-field-control'){
       assert.deepEqual(receipt.decisions.map(d=>d.kind),['REST','GUIDE','LINESTOP']);
