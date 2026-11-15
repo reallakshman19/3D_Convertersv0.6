@@ -1,6 +1,6 @@
 schema: AgentClaim.v1
 repository: reallakshman19/3D_Convertersv0.6
-pr_or_wip: WIP-XMLCII-ACTIVE-AUDIT-20261115
+pr_or_wip: PR3
 branch: codex/xmlcii-active-audit
 claim_state: ACTIVE
 authority_domains: [ACTIVE_V06_RESTRAINT_OBSERVATION, PRIVATE_AUDIT_EXPORT]
