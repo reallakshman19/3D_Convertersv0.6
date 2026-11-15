@@ -1,0 +1,13 @@
+schema: AgentPrStatus.v1
+repository: reallakshman19/3D_Convertersv0.6
+pr_or_wip: WIP-PR5-CI-RECOVERY-20261115
+mission: Restore confirmed XML229 browser CI runner compatibility after PR5
+branch: codex/pr5-ci-browser-recovery
+main_head_last_checked: fa54925905c42e2591ca42e5ddafe4ea1f2952aa
+work_intent: IMPLEMENT
+criticality: STANDARD
+current_stage: RUNNER_PIN_LOCALLY_VALIDATED_REMOTE_NOT_RUN
+report_path: agents/WIP-PR5-CI-RECOVERY-20261115_workreport.md
+appendix_a_status: NOT_APPLICABLE_NO_PRODUCTION_MUTATION
+highest_risk: Browser restoration may expose engineering failures; acceptance remains HOLD
+exact_next_action: Open draft PR and inspect exact-head real browser workflow results
