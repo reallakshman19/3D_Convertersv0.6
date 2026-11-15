@@ -46,7 +46,7 @@ export async function finishActiveRestraintAudit(journal,result) {
       ciiText:result.ciiText,nativeXmlText:journal.stages.at(-1).xmlText}));
     sourceGapCoverage=reconcileActiveRestraintSourceGaps({
       stagedJsonText:journal.stagedJsonText,originalRows:journal.original,records});
-    if(sourceGapCoverage.summary.unaccounted)
+    if(result.ciiText&&sourceGapCoverage.summary.unaccounted)
       errors.push({code:'ACTIVE_AUDIT_SOURCE_GAP_UNACCOUNTED',
         count:sourceGapCoverage.summary.unaccounted,
         message:'Original staged support gap claims lack exact source-member-to-CII verification.'});
