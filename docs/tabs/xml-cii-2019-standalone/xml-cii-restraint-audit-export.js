@@ -32,20 +32,28 @@ export function restraintAuditRows(report) {
 }
 
 export function restraintAuditCoverageRows(report) {
-  return (report.coverage?.sources||[]).map(source=>({
-    recordKind:'SOURCE_COVERAGE',field:'Source coverage',status:source.status,source:source.name,sourcePath:source.path,
-    node:(source.candidates||[]).map(row=>row.target.nodeNumber).join(' | '),branch:source.branch,
-    raw:source.fields,authority:report.coverage.policyBasis,ruleId:source.decision?.rule?.id||'',
-    after:source.kind||'',sourceMembers:[{path:source.path,name:source.name,fields:source.fields}],reason:source.reason||'',
-    expected:source.candidates||[],coverageStatus:report.coverage.status,
-  }));
+  return (report.coverage?.sources||[]).flatMap(source=>{
+    const trace=source.ciiTrace,traceStatus=trace?.status||'SOURCE_NATIVE_TRACE_NOT_RECORDED';
+    const slots=trace?.slots?.length?trace.slots:[null];
+    return slots.map(slot=>({
+      recordKind:'SOURCE_COVERAGE',field:'Source coverage',status:source.status+' · '+traceStatus,
+      sourceCoverageDisposition:source.status,ciiTraceStatus:traceStatus,
+      source:source.name,sourcePath:source.path,node:(source.candidates||[]).map(row=>row.target.nodeNumber).join(' | '),branch:source.branch,
+      raw:source.fields,authority:report.coverage.policyBasis,ruleId:source.decision?.rule?.id||'',
+      after:source.kind||'',actual:slot?slot.typeCode:null,retainedNode:slot?.node||'',
+      ciiBlock:slot?.blockIndex??'',ciiSlot:slot?.slotIndex??'',ciiLine:slot?.line??'',
+      sourceMembers:[{path:source.path,name:source.name,fields:source.fields}],reason:source.reason||'',
+      expected:source.candidates||[],coverageStatus:report.coverage.status,
+      ciiTrace:trace||null,observedGap:slot?.gap??null,
+    }));
+  });
 }
 
 const headers=['node','branch','nodeName','disposition','status','source','sourcePath','corroboratingMember','corroboratingPath',
   'field','sourceAttribute','raw','authority','ruleId','rule','decision','before','after','actual',
   'retainedNode','mapping','ciiBlock','ciiSlot','ciiLine','coordinateEvidence',
   'attachmentPath','attachmentName','attachmentDisposition','attachmentAuthority','sourceMembers',
-  'recordKind','reason','expected','coverageStatus'];
+  'recordKind','reason','expected','coverageStatus','sourceCoverageDisposition','ciiTraceStatus','observedGap','ciiTrace'];
 const csv=v=>{
   const raw=str(v),numeric=/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[Ee][+-]?\d+)?$/.test(raw);
   const safe=/^[=+\-@\t\r]/.test(raw)&&!numeric?"'"+raw:raw;

@@ -98,3 +98,5 @@ import './xml229-step7-dynamic-authority.test.mjs';
 import './xmlcii-ps4131-dynamic-step7-native.test.mjs';
 import './xml-cii-support-kind-owner-precedence.test.mjs';
 import './xml229-step78-runtime-parity.test.mjs';
+
+import './xmlcii-source-native-trace.test.mjs';

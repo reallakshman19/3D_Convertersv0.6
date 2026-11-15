@@ -3,6 +3,7 @@ import {digestUtf8,digestCanonical} from '../../contracts/gc-pw-v1/contract.mjs'
 import {activeRestraintRecords,recordActiveRestraintStage} from './xml-cii-active-restraint-journal.js';
 import {verifyRecordedRestraintFields} from './xml-cii-restraint-audit-verify.js';
 import {activeSourceCoverage} from './xml-cii-active-restraint-coverage.js';
+import {attachSourceNativeTrace} from './xml-cii-source-native-trace.js';
 
 export {activeAuditJobIdentity,activeAuditJobManifest,inspectActiveRestraintAudit,currentActiveRestraintAudit} from './xml-cii-active-audit-currency.js';
 
@@ -42,7 +43,7 @@ export async function finishActiveRestraintAudit(journal,result) {
     if(result.ciiText)({records,errors}=verifyRecordedRestraintFields(records,{
       ciiText:result.ciiText,nativeXmlText:journal.stages.at(-1).xmlText}));
   }catch(error){errors.push({code:String(error.message)});}
-  const coverage=activeSourceCoverage(journal,records);
+  const coverage=attachSourceNativeTrace(activeSourceCoverage(journal,records),records,Boolean(result.ciiText));
   const recorded=await sealJournal(journal,records,coverage);
   const failed=records.filter(row=>result.ciiText&&row.status!=='VERIFIED').length;
   const provenanceGaps=records.filter(row=>row.after&&(!row.originalTarget||row.source.kind==='pipeline-stage')).length;
