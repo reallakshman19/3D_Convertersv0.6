@@ -37,6 +37,11 @@ export function downloadTextFile(name, text, mime = 'text/plain;charset=utf-8') 
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = name || 'xml-cii-2019-output.txt';
-  anchor.click();
-  URL.revokeObjectURL(url);
+  // Revoking synchronously can cancel queued downloads in some browsers.
+  document.body?.appendChild?.(anchor);
+  try { anchor.click(); }
+  finally {
+    anchor.remove?.();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
 }

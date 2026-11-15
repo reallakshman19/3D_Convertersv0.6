@@ -173,3 +173,37 @@ test('real native CII field agreement cannot hide an omitted source restraint',a
   assert.equal(report.status,'FAILED');assert.equal(report.coverage.summary.missing,1);
   assert.equal(report.coverage.sources[0].missing[0].type,'LIM');
 });
+test('coincident legacy targets cannot prove one source owner by position',async()=>{
+  const input=job();
+  input.sourceText=xml.replace('</Branch>','<Node><NodeNumber>21</NodeNumber><NodeName>PS-20.2</NodeName><ComponentType>ANCI</ComponentType><Position>100 0 0</Position></Node></Branch>');
+  const {parity,journal}=await prepared(input);
+  const report=await finishActiveRestraintAudit(journal,{enrichedText:parity.xmlText});
+  assert.equal(report.coverage.sources[0].status,'SOURCE_OWNER_UNVERIFIED');
+  assert.equal(report.coverage.summary.ownerUnverified,1);
+  assert.equal(report.coverage.status,'INCOMPLETE');
+  assert.notEqual(report.status,'VERIFIED');
+});
+
+test('original LIM with matching numeric gap is not proof of staged authorship',async()=>{
+  const input=job();
+  input.sourceText=xml.replace('</Restraint>','</Restraint><Restraint><Type>LIM</Type><Gap>25</Gap></Restraint>');
+  const journal=createActiveRestraintJournal(input),target=journal.original[0].target;
+  journal.sourceExpectations={sources:[{path:'$[0].children[0]',status:'EVALUATED',
+    candidates:[{target,entries:[{type:'LIM',gap:'25'}]}]}]};
+  recordActiveRestraintStage(journal,'original-xml-only',input.sourceText);
+  const report=await finishActiveRestraintAudit(journal,{enrichedText:input.sourceText});
+  assert.equal(report.coverage.sources[0].status,'SOURCE_OWNER_UNVERIFIED');
+  assert.equal(report.coverage.summary.missing,0);
+  assert.notEqual(report.coverage.status,'COMPLETE');
+});
+
+test('duplicate original source names cannot claim one authored support output',async()=>{
+  const input=job(),json=JSON.parse(input.stagedJsonText);
+  json[0].children.push(support());
+  input.stagedJsonText=JSON.stringify(json);
+  const {parity,journal}=await prepared(input);
+  const report=await finishActiveRestraintAudit(journal,{enrichedText:parity.xmlText});
+  assert.equal(report.coverage.summary.supportOccurrences,2);
+  assert.equal(report.coverage.summary.ownerUnverified,2);
+  assert.equal(report.coverage.status,'INCOMPLETE');
+});

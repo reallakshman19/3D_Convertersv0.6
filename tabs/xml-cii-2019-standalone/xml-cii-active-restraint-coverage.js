@@ -56,11 +56,27 @@ function reconcileSource(source,plan,records,journal) {
   const {matched:targetRecords,missing,gaps}=checkCandidates(plan.candidates,records);
   if(missing.length)return {...row,status:'MISSING_RESTRAINT',missing,reason:'Current configured source policy expects a restraint absent from enriched XML.'};
   if(gaps.length)return {...row,status:'SOURCE_GAP_MISMATCH',missing:gaps,reason:'The current source-policy gap is absent at the resolved target.'};
-  const event=journal.events.some(event=>event.sources?.some(member=>member.path===source.path));
-  const status=observed.length?'RECORDED_SOURCE':targetRecords.every(record=>record.disposition==='PRESERVED')?
-    'PRESENT_IN_ORIGINAL_XML':event?'PRESENT_IN_RESOLVED_GROUP':'PRESENT_WITHOUT_PRODUCER_WITNESS';
-  return {...row,status,recordIds:targetRecords.map(record=>record.id),reason:
-    'Source-policy expectation checked against recorded XML; this does not establish engineering design acceptance.'};
+  // Numerical agreement at a shared coordinate is not independent source ownership.
+  // Require a single named original node, a unique source occurrence and a
+  // writer-attributed XML row; never let a group or pre-existing LIM certify it.
+  const sourceName=text(source.name).replace(/^[/]+/, '').toUpperCase();
+  const sameName=member=>text(member.branch).toUpperCase()===text(source.branch).toUpperCase()&&
+    text(member.name).replace(/^[/]+/, '').toUpperCase()===sourceName;
+  const duplicateSources=(journal.sourceCensus?.sources||[]).filter(sameName).length;
+  const target=plan.candidates.length===1?plan.candidates[0].target:null;
+  const namedOwner=Boolean(target&&sourceName&&
+    text(target.nodeName).replace(/^[/]+/, '').toUpperCase()===sourceName);
+  const authored=namedOwner?targetRecords.filter(record=>record.after&&sameTarget(record,target)&&
+    record.identity==='EXACT_ORIGINAL_IDENTITY'&&record.disposition!=='PRESERVED'&&
+    sourcePaths(record).length===1&&sourcePaths(record)[0]===source.path):[];
+  const entries=plan.candidates.length===1?plan.candidates[0].entries:[];
+  const exact=authored.length>0&&entries.length>0&&entries.every(entry=>authored.some(record=>
+    type(record.after.Type)===type(entry.type)&&Number(record.after.Gap||0)===Number(entry.gap||0)));
+  if(!exact||duplicateSources!==1)return {...row,status:'SOURCE_OWNER_UNVERIFIED',
+    recordIds:targetRecords.map(record=>record.id),
+    reason:'The source-policy type and gap agree, but unique original-name, source-path and writer-row ownership are not proven. A position group or original XML restraint cannot certify JSON authorship.'};
+  return {...row,status:'RECORDED_SOURCE',recordIds:authored.map(record=>record.id),
+    reason:'Recorded source-path and uniquely named original-node attribution; engineering physical-vertex approval remains separate.'};
 }
 
 export function activeSourceCoverage(journal,records) {
@@ -68,12 +84,12 @@ export function activeSourceCoverage(journal,records) {
   const plans=new Map((journal.sourceExpectations?.sources||[]).map(row=>[row.path,row]));
   const sources=census.sources.map(source=>reconcileSource(source,plans.get(source.path),records,journal));
   const count=status=>sources.filter(row=>row.status===status).length;
-  const accounted=new Set(['RECORDED_SOURCE','PRESENT_IN_ORIGINAL_XML','PRESENT_IN_RESOLVED_GROUP','EXCLUDED_BRANCH']);
+  const accounted=new Set(['RECORDED_SOURCE','EXCLUDED_BRANCH']);
   const failed=count('MISSING_RESTRAINT')+count('SOURCE_GAP_MISMATCH');
   const unresolved=sources.filter(row=>!accounted.has(row.status)).length;
   const summary={supportOccurrences:sources.length,applicable:sources.length-count('EXCLUDED_BRANCH'),
     accounted:sources.length-unresolved,unaccounted:count('UNACCOUNTED_SOURCE'),disabled:count('JSON_RESTRAINTS_DISABLED'),
-    unbound:count('SOURCE_UNBOUND'),ambiguous:count('AMBIGUOUS_TARGET'),missing:count('MISSING_RESTRAINT'),failed,
+    unbound:count('SOURCE_UNBOUND'),ambiguous:count('AMBIGUOUS_TARGET'),ownerUnverified:count('SOURCE_OWNER_UNVERIFIED'),missing:count('MISSING_RESTRAINT'),failed,
     excluded:count('EXCLUDED_BRANCH'),unresolved};
   const error=journal.sourceExpectations?.error||census.error;
   const status=census.status!=='RECORDED'?census.status:error||unresolved?'INCOMPLETE':
