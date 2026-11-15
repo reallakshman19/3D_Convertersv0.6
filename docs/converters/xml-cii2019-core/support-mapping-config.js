@@ -172,6 +172,29 @@ function mergeRequiredSupportRules(sourceRules = [], preserveSaved = false) {
   return merged;
 }
 
+// Existing Step 7 mapper prefix defaults, now visible before Test/Save.
+// Explicit saved rows (including disabled rows) always win over these seeds.
+export const DEFAULT_STEP7_MDS_ROWS = Object.freeze([
+  {id:'standalone-mds-gt-guide',priority:900,kind:'GUIDE',pattern:'GT'},
+  {id:'standalone-mds-st-linestop',priority:910,kind:'LINESTOP',pattern:'ST'},
+  {id:'standalone-mds-pg-guide',priority:920,kind:'GUIDE',pattern:'PG'},
+  {id:'standalone-mds-ls-linestop',priority:930,kind:'LINESTOP',pattern:'LS'},
+].map(r=>Object.freeze({...r,enabled:true,source:'staged-json',field:'MDSSUPPTYPE',
+  match:'startsWith',label:'LOW: MDSSUPPTYPE '+r.pattern+'* -> '+(r.kind==='GUIDE'?'GUI':'LIM')})));
+
+function mdsSeedEnabled(row,config) {
+  const aliases=config.supportTypeMapper?.rows;
+  if(!Array.isArray(aliases))return true;
+  const group=aliases.find(r=>normalizeKind(r?.kind)===row.kind);
+  if(!group||!Array.isArray(group.aliases))return true;
+  return group.aliases.some(a=>toText(a).toUpperCase().replace(/\*/g,'')===row.pattern);
+}
+
+function completeStep7Rules(rows,config) {
+  const ids=new Set(rows.map(r=>toText(r?.id)));
+  return [...rows,...DEFAULT_STEP7_MDS_ROWS.filter(r=>!ids.has(r.id)&&mdsSeedEnabled(r,config))];
+}
+
 export function defaultSupportKindProfiles(config = {}) {
   const legacyKindToType = {
     REST: '+Y',
@@ -241,12 +264,12 @@ export function migrateSupportMappingConfig(config = {}, mapperRules = null) {
       profiles[kind] = normalizeSupportKindProfile(existing.kindProfiles?.[kind] || {}, defaultProfiles[kind] || {});
     }
     const sourceRules = mergeRequiredSupportRules(Array.isArray(existing.rules) ? existing.rules : [], true);
-    return { version: 2, useJsonForRestraints: existing.useJsonForRestraints !== false, rules: sourceRules.map(normalizeSupportRuleForConfig), kindProfiles: profiles };
+    return { version: 2, useJsonForRestraints: existing.useJsonForRestraints !== false, rules: completeStep7Rules(sourceRules,config).map(normalizeSupportRuleForConfig), kindProfiles: profiles };
   }
 
   const baseRules = Array.isArray(mapperRules) && mapperRules.length ? mapperRules : DEFAULT_RULES;
   const sourceRules = mergeRequiredSupportRules(baseRules);
-  return { version: 2, useJsonForRestraints: config.useRestraintTypeBasedOnJson !== false, rules: sourceRules.map(normalizeSupportRuleForConfig), kindProfiles: defaultProfiles };
+  return { version: 2, useJsonForRestraints: config.useRestraintTypeBasedOnJson !== false, rules: completeStep7Rules(sourceRules,config).map(normalizeSupportRuleForConfig), kindProfiles: defaultProfiles };
 }
 
 export function supportRulesFromMapping(supportMapping) {

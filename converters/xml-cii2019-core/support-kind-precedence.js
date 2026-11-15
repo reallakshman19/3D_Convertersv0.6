@@ -22,8 +22,6 @@ const SUPPORT_KINDS = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'LIMIT', 'ANCH
 const DESCRIPTION_KEYS = Object.freeze(['DTXR', 'DESC', 'DESCRIPTION']);
 const TEXT_FALLBACK_FIELDS = Object.freeze(['DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'CMPSUPTYPE', 'MDSSUPPTYPE',
   'SKEY', 'COMPONENTTYPE']);
-const TABLE_FIELDS = Object.freeze([...TEXT_FALLBACK_FIELDS,'SPRE','NAME','NODETYPE','NODEGAP',
-  'CMPSUPGAP','CMPSUPGAPPOS','CMPSUPGAPPS']);
 const GENERATED_FIELDS = Object.freeze(['SUPPORTKIND', 'SUPPORTMAPPERKIND', 'SUPPORTTYPE']);
 const STAGED_SOURCES = Object.freeze(['', 'ALL', 'STAGED-JSON', 'JSON']);
 // Regex syntax that JS and Python read differently (or only one reads).
@@ -34,7 +32,7 @@ const fieldKey = (key) => text(key).toUpperCase().replace(/[^A-Z0-9]/g, '');
 const refuse = (code, message) => Object.assign(new Error(`${code}: ${message}`), { code });
 
 function fields(attrs = {}) {
-  const out = {};
+  const out = Object.create(null);
   for (const [key, value] of Object.entries(attrs || {})) {
     if (value !== null && typeof value === 'object') continue;
     const name = fieldKey(key);
@@ -91,8 +89,7 @@ const fieldName = (name) => {
 function ruleEvidence(evidence, rule) {
   const wanted = terms(rule.field).map(fieldName);
   const wildcard=!wanted.length||wanted.includes('*')||wanted.includes('ANY');
-  return Object.entries(evidence).filter(([key])=>wildcard
-    ?TABLE_FIELDS.includes(key)||GENERATED_FIELDS.includes(key):wanted.includes(key));
+  return Object.entries(evidence).filter(([key])=>wildcard||wanted.includes(key));
 }
 
 function compiledRegex(rule) {
@@ -145,7 +142,7 @@ function matchTableRules(attrs,evidence,rules,observe) {
     }
   }
   if (first) {
-    observe?.({ source: 'step7-support-table', rule: { ...first } });
+    observe?.({ source: 'step7-support-table', rule: { ...first,value:first.matchEvidence.value } });
     return first.kind;
   }
   return '';
@@ -165,6 +162,20 @@ export function tableSupportKind(attrs = {}, config = {}, onlyUserRows = false, 
       match: 'engineering-keywords', pattern: Object.values(evidence).join(' ') } });
   return kind||matchTableRules(attrs,Object.fromEntries(Object.entries(f)
     .filter(([key])=>GENERATED_FIELDS.includes(key))),rules,observe);
+}
+
+// Project original scalar attributes for Preview independently of display fields.
+export function projectSupportRuleEvidence(rawValue, config = {}, baseline = []) {
+  const raw=rawValue&&typeof rawValue==='object'?rawValue:{};
+  const attrs=raw.attributes||raw.ATTRIBUTES||raw.rawAttributes||raw;
+  const rules=config.supportMapping?.rules;
+  const names=(Array.isArray(rules)?rules:[]).filter(r=>r&&r.enabled!==false&&
+    STAGED_SOURCES.includes(text(r.source||'all').toUpperCase()))
+    .flatMap(r=>terms(r.field||'*')).map(fieldName);
+  const wildcard=names.includes('*')||names.includes('ANY');
+  const wanted=new Set([...baseline.map(fieldName),...names]);
+  return Object.fromEntries(Object.entries(attrs).filter(([key,value])=>
+    value!=null&&typeof value!=='object'&&text(value)&&(wildcard||wanted.has(fieldName(key)))));
 }
 
 export function generatedSupportKind(attrs = {}) {

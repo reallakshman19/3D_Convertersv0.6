@@ -1,5 +1,5 @@
 import { governedSupportKind } from '../../converters/xml-cii2019-core/support-kind-precedence.js';
-import {migrateSupportMappingConfig} from '../../converters/xml-cii2019-core/support-mapping-config.js';
+import {migrateSupportMappingConfig,DEFAULT_STEP7_MDS_ROWS} from '../../converters/xml-cii2019-core/support-mapping-config.js';
 import {mutateRestraintType} from '../../converters/xml-cii2019-core/restraint-type-mutation.js';
 const KINDS = Object.freeze(['REST', 'GUIDE', 'LINESTOP', 'ANCHOR']);
 
@@ -416,16 +416,22 @@ function serializeMapperConfig(input, mapperRows) {
     },
     rows: mapperRows.map(({ kind, aliases, ciiKind, ciiPreview }) => ({ kind, aliases, ciiKind, ciiPreview })),
   };
-  const injected = mdsPrefixRules(mapperRows);
-  const existingMapping = migrateSupportMappingConfig(config);
-  const existingRules = array(existingMapping.rules).filter(rule=>
-    !/^standalone-mds-(?:gt-guide|st-linestop|pg-guide|ls-linestop)$/.test(text(rule?.id)));
-  config.supportMapping = {
-    ...existingMapping,
-    version: 2,
-    rules: [...existingRules, ...injected],
-  };
-  return JSON.stringify(config, null, 2);
+  const injected=mdsPrefixRules(mapperRows);
+  const existingMapping=migrateSupportMappingConfig(config);
+  const defaultById=new Map(DEFAULT_STEP7_MDS_ROWS.map(r=>[r.id,r]));
+  const injectedIds=new Set(injected.map(r=>r.id));
+  // An explicitly removed alias removes only an unchanged automatically seeded
+  // row. Test/Save must not reset the user's edited or disabled Step 7 rows.
+  const existingRules=array(existingMapping.rules).filter(rule=>{
+    const seed=defaultById.get(rule.id);
+    if(!seed||injectedIds.has(rule.id))return true;
+    return ['enabled','priority','source','field','match','pattern','kind']
+      .some(key=>rule[key]!==seed[key]);
+  });
+  const existingIds=new Set(existingRules.map(r=>r.id));
+  config.supportMapping={...existingMapping,version:2,
+    rules:[...existingRules,...injected.filter(r=>!existingIds.has(r.id))]};
+  return JSON.stringify(config,null,2);
 }
 
 export function runStandaloneSupportTypeMapper(input = {}) {

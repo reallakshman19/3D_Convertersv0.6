@@ -58,7 +58,7 @@ export function supportKindFromMember(member, config = {}, onDecision) {
   const captured = safeObject(member?.capturedFields);
   const attrs = memberAttributes(member);
   // Owner rule (RCA-04): NODETYPE first, then the Step 7 support table.
-  const decided = governedSupportKind({ ...captured, ...attrs }, config,undefined,onDecision);
+  const decided = governedSupportKind(Object.keys(attrs).length?attrs:captured, config,undefined,onDecision);
   if (decided.kind) return decided.kind;
   const code = text(captured.MDSSUPPTYPE || attrs.MDSSUPPTYPE).toUpperCase();
   if (code.startsWith('GT')) return observedFallback('GUIDE','MDSSUPPTYPE-GT',code,onDecision);
@@ -157,6 +157,7 @@ export function closeGovernedMdsPositionRestraintsXml(xmlText, stagedJsonText, c
 
   const rawLedger = buildStandaloneDtxrResolutionLedger(source, stagedJsonText, config);
   const traceConfig = {
+    ...config,
     captureFields: [...new Set(['DTXR', 'SPRE', 'SPREF', 'MDSSUPPTYPE', 'NAME', 'CMPSUPGAP', ...SUPPORT_KIND_EVIDENCE_FIELDS])],
   };
   const ledger = decorateJsonTraceLedger(rawLedger, traceConfig);
