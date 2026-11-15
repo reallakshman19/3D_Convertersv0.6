@@ -1,3 +1,4 @@
+import {governedSupportKind} from './support-kind-precedence.js';
 import {
   resolveKindDescriptor,
   SUPPORT_KINDS,
@@ -9,7 +10,6 @@ import {
 
 import {
   migrateSupportMappingConfig,
-  supportRulesFromMapping,
   normalizeXmlTypes,
 } from './support-mapping-config.js';
 
@@ -215,11 +215,6 @@ function attrsWithoutGeneratedSupportKind(attrs = {}) {
   return stripped;
 }
 
-function supportDescriptorFromKind(kind, attrs, source) {
-  const normalized = normalizeSupportKind(kind);
-  return normalized ? { primaryKind: normalized, kinds: [normalized], dofs: {}, source, attrs } : null;
-}
-
 function normalizeSupportKind(value) {
   const kind = toText(value).toUpperCase().replace(/\s+/g, '');
   return SUPPORT_KINDS.includes(kind) ? kind : '';
@@ -242,37 +237,25 @@ function isKindReference(value) {
 }
 
 export function resolveXmlCiiSupportDescriptor(attrs, config = {}, onDecision) {
-  const direct = normalizeSupportKind(attrs?.SUPPORT_KIND || attrs?.SUPPORT_MAPPER_KIND || attrs?.SUPPORT_TYPE);
-  const directDescriptor = supportDescriptorFromKind(direct, attrs, 'explicit');
-  if (direct && direct !== 'REST') {
-    onDecision?.({source:'explicit',rule:{id:'explicit-generated-kind',value:direct}});
-    return directDescriptor;
+  let decision;
+  const resolved=governedSupportKind(attrs,config,SUPPORT_KINDS,value=>{decision=value;});
+  if(resolved.kind) {
+    onDecision?.(decision);
+    // Keep the unchanged default CA100 catalogue composite; a different
+    // explicit Step 7 or NODETYPE decision remains authoritative.
+    const composite=decision?.rule?.id==='builtin-ca100'&&resolved.kind==='GUIDE';
+    const descriptor=resolveKindDescriptor(composite?attrs:{}, {userRules:[],defaultRules:[],kindMap:{},defaultKind:resolved.kind});
+    return {...descriptor,source:'supportMapping',attrs};
   }
-
-  const supportMapping = migrateSupportMappingConfig(config);
-  const rules = supportRulesFromMapping(supportMapping);
-  const ruleAttrs = attrsWithoutGeneratedSupportKind(attrs);
-  if (rules.length) {
-    const descriptor = resolveKindDescriptor(ruleAttrs, {
-      userRules: rules,
-      defaultRules: [],
-      kindMap: {},
-      defaultKind: '',
-      onDecision,
-    });
-    if (descriptor?.primaryKind) return { ...descriptor, source: 'supportMapping' };
-  }
-
-  const legacyKind = normalizeSupportKind(resolveKindFromAttrs(ruleAttrs));
-  if (legacyKind) {
+  if(resolved.source==='description-conflict'||resolved.source==='step7-not-governed')
+    return {primaryKind:'',kinds:[],dofs:{},source:resolved.source};
+  const ruleAttrs=attrsWithoutGeneratedSupportKind(attrs);
+  const legacyKind=normalizeSupportKind(resolveKindFromAttrs(ruleAttrs));
+  if(legacyKind) {
     onDecision?.({source:'legacyRvmSupportMapper',rule:{id:'resolveKindFromAttrs',evidenceStatus:'ROUTE_ONLY'}});
-    return { primaryKind: legacyKind, kinds: [legacyKind], dofs: {}, source: 'legacyRvmSupportMapper' };
+    return {primaryKind:legacyKind,kinds:[legacyKind],dofs:{},source:'legacyRvmSupportMapper'};
   }
-  if (directDescriptor) {
-    onDecision?.({source:'explicit',rule:{id:'explicit-generated-kind',value:direct}});
-    return directDescriptor;
-  }
-  return { primaryKind: '', kinds: [], dofs: {}, source: 'none' };
+  return {primaryKind:'',kinds:[],dofs:{},source:'none'};
 }
 
 export function resolveXmlCiiSupportKind(attrs, config = {}, onDecision) {

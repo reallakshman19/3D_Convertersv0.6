@@ -22,7 +22,9 @@ function normalizeMatch(match) {
 
 const HALT = 'ST' + 'OP';
 const LINE_LIMIT_KIND = `LINE${HALT}`;
-const SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE';
+// Narrow generic intent rules visibly; specific SPRE/NAME rows remain executable.
+const LEGACY_SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE';
+const SUPPORT_INTENT_FIELDS = 'SKEY,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,MDSSUPPTYPE';
 export const DEFAULT_STOP_KEYWORD_HELP = 'Default stop detection: Line stop, Limit stop, Axial stop, Directional anchor. Generic Anchor maps to ANCHOR. Generic REST/LINE text is not used as stop evidence.';
 const LIMIT_PATTERN = String.raw`\b(?:LINE\s*STOP|LIMIT\s*STOP|AXIAL\s*STOP|DIRECTIONAL\s+ANCHOR)\b`;
 
@@ -140,7 +142,7 @@ const REQUIRED_SUPPORT_RULES = Object.freeze([
   }),
 ]);
 
-function mergeRequiredSupportRules(sourceRules = []) {
+function mergeRequiredSupportRules(sourceRules = [], preserveSaved = false) {
   const existingById = new Map();
   for (const rule of Array.isArray(sourceRules) ? sourceRules : []) {
     const id = toText(rule?.id);
@@ -150,9 +152,14 @@ function mergeRequiredSupportRules(sourceRules = []) {
   const requiredIds = new Set(REQUIRED_SUPPORT_RULES.map((rule) => rule.id));
   const merged = REQUIRED_SUPPORT_RULES.map((required) => {
     const existing = existingById.get(required.id) || {};
+    const saved = preserveSaved && existing.id ? existing : {};
+    const field = saved.field && saved.field !== LEGACY_SUPPORT_INTENT_FIELDS
+      ? saved.field : required.field;
     return {
       ...existing,
       ...required,
+      ...saved,
+      field,
       enabled: existing.enabled === false ? false : required.enabled,
       locked: existing.locked === true || required.locked === true,
     };
@@ -163,6 +170,29 @@ function mergeRequiredSupportRules(sourceRules = []) {
     if (!requiredIds.has(id)) merged.push(rule);
   }
   return merged;
+}
+
+// Existing Step 7 mapper prefix defaults, now visible before Test/Save.
+// Explicit saved rows (including disabled rows) always win over these seeds.
+export const DEFAULT_STEP7_MDS_ROWS = Object.freeze([
+  {id:'standalone-mds-gt-guide',priority:900,kind:'GUIDE',pattern:'GT'},
+  {id:'standalone-mds-st-linestop',priority:910,kind:'LINESTOP',pattern:'ST'},
+  {id:'standalone-mds-pg-guide',priority:920,kind:'GUIDE',pattern:'PG'},
+  {id:'standalone-mds-ls-linestop',priority:930,kind:'LINESTOP',pattern:'LS'},
+].map(r=>Object.freeze({...r,enabled:true,source:'staged-json',field:'MDSSUPPTYPE',
+  match:'startsWith',label:'LOW: MDSSUPPTYPE '+r.pattern+'* -> '+(r.kind==='GUIDE'?'GUI':'LIM')})));
+
+function mdsSeedEnabled(row,config) {
+  const aliases=config.supportTypeMapper?.rows;
+  if(!Array.isArray(aliases))return true;
+  const group=aliases.find(r=>normalizeKind(r?.kind)===row.kind);
+  if(!group||!Array.isArray(group.aliases))return true;
+  return group.aliases.some(a=>toText(a).toUpperCase().replace(/\*/g,'')===row.pattern);
+}
+
+function completeStep7Rules(rows,config) {
+  const ids=new Set(rows.map(r=>toText(r?.id)));
+  return [...rows,...DEFAULT_STEP7_MDS_ROWS.filter(r=>!ids.has(r.id)&&mdsSeedEnabled(r,config))];
 }
 
 export function defaultSupportKindProfiles(config = {}) {
@@ -233,13 +263,13 @@ export function migrateSupportMappingConfig(config = {}, mapperRules = null) {
     for (const kind of SUPPORT_KINDS) {
       profiles[kind] = normalizeSupportKindProfile(existing.kindProfiles?.[kind] || {}, defaultProfiles[kind] || {});
     }
-    const sourceRules = mergeRequiredSupportRules(Array.isArray(existing.rules) ? existing.rules : []);
-    return { version: 2, useJsonForRestraints: existing.useJsonForRestraints !== false, rules: sourceRules.map(normalizeSupportRuleForConfig), kindProfiles: profiles };
+    const sourceRules = mergeRequiredSupportRules(Array.isArray(existing.rules) ? existing.rules : [], true);
+    return { version: 2, useJsonForRestraints: existing.useJsonForRestraints !== false, rules: completeStep7Rules(sourceRules,config).map(normalizeSupportRuleForConfig), kindProfiles: profiles };
   }
 
   const baseRules = Array.isArray(mapperRules) && mapperRules.length ? mapperRules : DEFAULT_RULES;
   const sourceRules = mergeRequiredSupportRules(baseRules);
-  return { version: 2, useJsonForRestraints: config.useRestraintTypeBasedOnJson !== false, rules: sourceRules.map(normalizeSupportRuleForConfig), kindProfiles: defaultProfiles };
+  return { version: 2, useJsonForRestraints: config.useRestraintTypeBasedOnJson !== false, rules: completeStep7Rules(sourceRules,config).map(normalizeSupportRuleForConfig), kindProfiles: defaultProfiles };
 }
 
 export function supportRulesFromMapping(supportMapping) {

@@ -393,14 +393,12 @@ _TABLE_MATCH_TYPES = ('startsWith', 'equals', 'contains', 'regex')
 _LEGACY_SUPPORT_INTENT_FIELDS = 'SPRE,SKEY,NAME,DESCRIPTION,DESC,CMPSUPTYPE,DTXR,SUPPORT_TYPE,SUPPORT_KIND,SUPPORT_MAPPER_KIND,MDSSUPPTYPE'
 _TEXT_FALLBACK_FIELDS = ('DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'CMPSUPTYPE', 'MDSSUPPTYPE',
                          'SKEY', 'COMPONENTTYPE')
-_TABLE_FIELDS = _TEXT_FALLBACK_FIELDS + ('SPRE', 'NAME', 'NODETYPE', 'NODEGAP',
-                                        'CMPSUPGAP', 'CMPSUPGAPPOS', 'CMPSUPGAPPS')
 _GENERATED_FIELDS = ('SUPPORTKIND', 'SUPPORTMAPPERKIND', 'SUPPORTTYPE')
 _DESCRIPTION_KEYS = ('DTXR', 'DESC', 'DESCRIPTION')
 
 
 def _owner_text(value):
-    return '' if value is None else str(value).strip()
+    return '' if value is None else str(value).lower() if isinstance(value, bool) else str(value).strip()
 
 
 def _owner_key(key):
@@ -448,7 +446,7 @@ def _rule_values(evidence, rule):
     wanted = [_field_name(f) for f in _split_terms(rule['field'])]
     wildcard = not wanted or '*' in wanted or 'ANY' in wanted
     return [(k, v) for k, v in evidence.items() if str(v).strip() and
-            (k in _TABLE_FIELDS + _GENERATED_FIELDS if wildcard else k in wanted)]
+            (wildcard or k in wanted)]
 
 
 def _kind_from_text(value):
@@ -492,6 +490,29 @@ _STAGED_SOURCES = ('', 'ALL', 'STAGED-JSON', 'JSON')
 _REGEX_OUTSIDE_SUBSET = re.compile(r'\(\?(?![:=!]|<[=!])|\\[AZzGpPk]|\$\{|\(\?P')
 
 
+_STEP7_MDS_SEEDS = [
+    dict(id=ident, priority=priority, kind=kind, pattern=pattern,
+         enabled=True, source='staged-json', field='MDSSUPPTYPE', match='startsWith')
+    for ident, priority, kind, pattern in (
+        ('standalone-mds-gt-guide', 900, 'GUIDE', 'GT'),
+        ('standalone-mds-st-linestop', 910, 'LINESTOP', 'ST'),
+        ('standalone-mds-pg-guide', 920, 'GUIDE', 'PG'),
+        ('standalone-mds-ls-linestop', 930, 'LINESTOP', 'LS'))
+]
+
+
+def _mds_seed_enabled(row, config):
+    aliases = ((config or {}).get('supportTypeMapper') or {}).get('rows')
+    if not isinstance(aliases, list):
+        return True
+    group = next((r for r in aliases if isinstance(r, dict) and
+                  _owner_text(r.get('kind')).upper() == row['kind']), None)
+    if not group or not isinstance(group.get('aliases'), list):
+        return True
+    return any(_owner_text(a).upper().replace('*', '') == row['pattern']
+               for a in group['aliases'])
+
+
 def table_rules(config):
     """Enabled Step 7 rows for staged JSON, in priority order (as JS tableRules)."""
     mapping = (config or {}).get('supportMapping')
@@ -510,6 +531,8 @@ def table_rules(config):
         merged.append({**old, **rule, **saved, 'field': field,
                        'enabled': False if old.get('enabled') is False else rule['enabled']})
     merged += [r for r in source if not (isinstance(r, dict) and _owner_text(r.get('id')) in required_ids)]
+    ids = {_owner_text(r.get('id')) for r in merged if isinstance(r, dict)}
+    merged += [r for r in _STEP7_MDS_SEEDS if r['id'] not in ids and _mds_seed_enabled(r, config)]
     rows = []
     for index, rule in enumerate(merged):
         rule = rule if isinstance(rule, dict) else {}

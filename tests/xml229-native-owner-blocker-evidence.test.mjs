@@ -92,3 +92,9 @@ test('new native owner audit UI is mirrored and does not replace native proof',a
   assert.match(candidate,/reconcileXml229ActualCiiAgainstFinal/);
   assert.doesNotMatch(candidate,/executeStandaloneFallbackCandidate|xml229NativeFinalPacket:\s*null/);
 });
+
+// Dynamic Step 7 qualification in the existing Run HOLD test gate.
+import './xml229-step7-dynamic-authority.test.mjs';
+import './xmlcii-ps4131-dynamic-step7-native.test.mjs';
+import './xml-cii-support-kind-owner-precedence.test.mjs';
+import './xml229-step78-runtime-parity.test.mjs';
