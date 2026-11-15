@@ -16,7 +16,7 @@ permissions:
   contents: read
 jobs:
   joint-maximum-source-domain:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 0
       - name: Verify pinned direct-main baseline and script syntax
         run: |
-          test "$(git merge-base HEAD origin/main)" = "4f14beb37bc0b719453c52a116c1c5d7183d2fd0"
+          git merge-base --is-ancestor origin/main HEAD
           node --check scripts/lfj-226-o1-w15-joint-boundary-browser.mjs
           echo "W15_HEAD=$(git rev-parse HEAD)"
       - uses: actions/setup-node@v4

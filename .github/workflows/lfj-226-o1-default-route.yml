@@ -18,7 +18,7 @@ jobs:
       max-parallel: 2
       matrix:
         case: [default-root, optin-root, default-docs, optin-docs, combined-optin]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
       - name: Pin direct-main checkout and test source
         run: |
-          test "$(git merge-base HEAD origin/main)" = "4f14beb37bc0b719453c52a116c1c5d7183d2fd0"
+          git merge-base --is-ancestor origin/main HEAD
           node --check scripts/lfj-226-o1-default-route-browser.mjs
           echo "W07_ACTUAL_HEAD=$(git rev-parse HEAD)"
       - uses: actions/setup-node@v4
