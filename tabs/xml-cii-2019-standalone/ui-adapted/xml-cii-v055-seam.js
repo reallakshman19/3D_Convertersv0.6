@@ -26,6 +26,7 @@ import { materializeMasterDatasetRows } from './xml-cii-adapted-master-dataset-r
 import { resolveXml229CurrentPreviewBlob } from './xml-cii-adapted-lfj-o1-intake.js?v=20261113-x5a-2';
 import { xmlCiiProcessingMode } from './xml-cii-adapted-processing-mode.js?v=20261113-x5a-2';
 import { createElement } from './xml-cii-adapted-dom.js?v=20260813-mode-a-full-propagation-2';
+import {renderActiveRestraintAuditPanels} from './xml-cii-active-restraint-audit-panel.js';
 
 export const V045_PHASE_IDS = Object.freeze(['weight-match', 'support-mapper', 'config', 'matched-audit', 'run']);
 const V045_PHASES = new Set(V045_PHASE_IDS);
@@ -191,7 +192,9 @@ export function v045ViewRef(ref, state) {
 }
 
 export function renderV045ActivePhase(main, viewRef, render) {
-  return renderV045Phase(main, viewRef, render);
+  const result=renderV045Phase(main, viewRef, render);
+  if(viewRef.current.activePhaseId==='run')renderActiveRestraintAuditPanels(main,viewRef);
+  return result;
 }
 
 export function installV045WorkspaceHooks(main, viewRef, state) {

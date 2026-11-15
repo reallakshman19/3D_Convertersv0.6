@@ -1,6 +1,7 @@
 /** Private owner-local reports from recorded evidence. No re-enrichment. */
 const str=v=>v==null?'':typeof v==='object'?JSON.stringify(v):String(v);
 const member=r=>r.source?.member||r.source?.corroboration||r.source?.attachment;
+const members=r=>r.source?.members||(member(r)?[member(r)]:[]);
 const actual=(r,name)=>({Type:r.observed?.typeCode,Stiffness:r.observed?.stiffness,
   Gap:r.observed?.gap,Friction:r.observed?.friction,DirectionCosineX:r.observed?.direction?.[0],
   DirectionCosineY:r.observed?.direction?.[1],DirectionCosineZ:r.observed?.direction?.[2]})[name];
@@ -11,9 +12,10 @@ export function restraintAuditRows(report) {
     node:record.target.nodeNumber,branch:record.target.branch,nodeName:record.target.nodeName,
     disposition:record.disposition,status:record.status||report.status,
     source:record.source?.kind==='original-xml'?'Original XML':record.source?.kind==='config-default'?
-      'Configuration / ATTA default':member(record)?.name||record.source?.kind||'',
+      'Configuration / ATTA default':members(record).map(source=>source.name).filter(Boolean).join(' | ')||record.source?.kind||'',
     sourcePath:record.source?.kind==='config-default'?'config:atta-default-restraint':
-      (record.source?.kind!=='original-xml'&&member(record)?.path)||`Branch[${record.target.branchOccurrenceIndex+1}]/Node[${record.target.sourceNodeOrdinal+1}]/Restraint[${(record.source?.restraintOrdinal??record.restraintOrdinal)+1}]`,
+      (record.source?.kind!=='original-xml'&&members(record).map(source=>source.path).filter(Boolean).join(' | '))||`Branch[${record.target.branchOccurrenceIndex+1}]/Node[${record.target.sourceNodeOrdinal+1}]/Restraint[${(record.source?.restraintOrdinal??record.restraintOrdinal)+1}]`,
+    sourceMembers:members(record),
     corroboratingMember:(record.source?.corroboration||record.source?.attachment)?.name||'',
     corroboratingPath:(record.source?.corroboration||record.source?.attachment)?.path||'',
     field:f.name,sourceAttribute:f.evidence?.attribute||record.decision?.rule?.field||'',
@@ -32,7 +34,7 @@ export function restraintAuditRows(report) {
 const headers=['node','branch','nodeName','disposition','status','source','sourcePath','corroboratingMember','corroboratingPath',
   'field','sourceAttribute','raw','authority','ruleId','rule','decision','before','after','actual',
   'retainedNode','mapping','ciiBlock','ciiSlot','ciiLine','coordinateEvidence',
-  'attachmentPath','attachmentName','attachmentDisposition','attachmentAuthority'];
+  'attachmentPath','attachmentName','attachmentDisposition','attachmentAuthority','sourceMembers'];
 const csv=v=>{
   const raw=str(v),numeric=/^[+-]?(?:\d+\.?\d*|\.\d+)(?:[Ee][+-]?\d+)?$/.test(raw);
   const safe=/^[=+\-@\t\r]/.test(raw)&&!numeric?"'"+raw:raw;
@@ -54,7 +56,8 @@ function recordHtml(record,report) {
     '<table><tr>'+columns.map(k=>'<th>'+html(k)+'</th>').join('')+'</tr>'+
     rows.map(row=>'<tr>'+columns.map(k=>'<td>'+html(row[k])+'</td>').join('')+'</tr>').join('')+'</table>'+
     '<details><summary>Rule, source match and retained-node evidence</summary><pre>'+html(JSON.stringify({
-      source:record.source,decision:record.decision,match:record.match,mapping:record.mapping},null,2))+'</pre></details></article>';
+      source:record.source,decision:record.decision,match:record.match,mapping:record.mapping,
+      originalTarget:record.originalTarget,trace:record.trace},null,2))+'</pre></details></article>';
 }
 export function restraintAuditHtml(report) {
   const recorded=report.recorded||report;
