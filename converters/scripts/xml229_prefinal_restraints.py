@@ -321,7 +321,8 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
     stage = final.get('prefinalRestraints')
     if stage is None:
         return False
-    require(isinstance(stage, dict) and stage.get('schema') == 'XML229.PrefinalRestraints.v1',
+    require(isinstance(stage, dict) and stage.get('schema') in (
+        'XML229.PrefinalRestraints.v1', 'XML229.PrefinalRestraints.v2'),
             'NATIVE_PREFINAL_RESTRAINT_STAGE_INVALID')
     raw = staged_json_path.read_bytes() if staged_json_path is not None else b''
     sha = hashlib.sha256(raw).hexdigest()
@@ -329,12 +330,24 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
             (not packet.get('originalJsonSha256') or packet['originalJsonSha256'] == sha),
             'NATIVE_PREFINAL_RESTRAINT_SOURCE_SHA_DRIFT')
     require(isinstance(config, dict), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_REQUIRED')
+    wants_v2=config.get('xml229PhysicalVertexPrefinal') is True and bool(raw.strip()) and \
+        (config.get('supportMapping') or {}).get('useJsonForRestraints') is not False
+    require(stage['schema']==('XML229.PrefinalRestraints.v2' if wants_v2 else 'XML229.PrefinalRestraints.v1'),
+            'NATIVE_PREFINAL_RESTRAINT_MODE_DRIFT')
     if (config.get('supportMapping') or {}).get('useJsonForRestraints') is False:
+        require(stage['schema'] != 'XML229.PrefinalRestraints.v2',
+                'NATIVE_PREFINAL_RESTRAINT_MODE_DRIFT')
         return True
     try:
         parsed = json.loads(raw.decode('utf-8-sig')) if raw.strip() else []
     except (ValueError, UnicodeError):
         require(False, 'NATIVE_PREFINAL_RESTRAINT_SOURCE_INVALID')
+    if stage['schema'] == 'XML229.PrefinalRestraints.v2':
+        require(config.get('xml229PhysicalVertexPrefinal') is True and bool(raw.strip()),
+                'NATIVE_PREFINAL_RESTRAINT_MODE_DRIFT')
+        from xml229_physical_vertex_prefinal import replay_physical_vertex_prefinal
+        return replay_physical_vertex_prefinal(expected, parsed, config,
+            stage.get('physicalVertexMemberCensus'), require)
     source_nodes = [(field(b, 'Branchname'), n) for b in expected.iter() if local(b) == 'Branch'
                     for n in children(b, 'Node')]
     groups = calibrated_groups(source_nodes, source_entries(parsed, config), config, field)
