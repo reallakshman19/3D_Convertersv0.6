@@ -1,6 +1,6 @@
 schema: AgentClaim.v1
 repository: reallakshman19/3D_Convertersv0.6
-pr_or_wip: WIP-PR5-CI-RECOVERY-20261115
+pr_or_wip: PR6
 claim_state: ACTIVE_REVIEW_PENDING
 claim_modes: [CI_CONFIGURATION_ONLY]
 authority_domains: [XML229_BROWSER_CI_RUNNER]
@@ -9,3 +9,5 @@ files:
 protected: [PR5_DIAGNOSTICS, ENGINEERING_SEMANTICS, WRITER_RUNTIME, TOPOLOGY_GEOMETRY, SOURCE_INPUTS, V2_OFF, TEST_ORACLES, MERGE_OWNER_ONLY]
 coordination: No exact-file overlap with drafts PR1 and PR4; no engineering authority claimed
 last_verified_head: fa54925905c42e2591ca42e5ddafe4ea1f2952aa
+
+native_pr_state_authority: https://github.com/reallakshman19/3D_Convertersv0.6/pull/6
