@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 import * as root from '../converters/xml-cii2019-core/support-kind-precedence.js';
 import * as legacy from '../v045/converters/xml-cii2019-core/support-kind-precedence.js';
 import * as served from '../docs/converters/xml-cii2019-core/support-kind-precedence.js';
-import {migrateSupportMappingConfig as rootConfig,applySupportMappingRowPatch} from '../converters/xml-cii2019-core/support-mapping-config.js';
+import {migrateSupportMappingConfig as rootConfig,applySupportMappingRowPatch,removeSupportMappingRule} from '../converters/xml-cii2019-core/support-mapping-config.js';
 import {migrateSupportMappingConfig as legacyConfig} from '../v045/converters/xml-cii2019-core/support-mapping-config.js';
 import {decorateJsonTraceMember as rootTrace} from '../tabs/xml-cii-2019-standalone/xml-cii-json-trace-fields.js';
 import {decorateJsonTraceMember as legacyTrace} from '../v045/tabs/xml-cii-2019-standalone/xml-cii-json-trace-fields.js';
@@ -126,4 +126,16 @@ test('owner GT5/GT policy repairs old persisted wrong rows and preserves unrelat
     'print(json.dumps([[r["id"],r["priority"],r["kind"]] for r in m.table_rules(c) if r["id"] in m._GT_GUIDE_PRIORITIES]))'].join('\n');
   const rows=JSON.parse(execFileSync(nativeTestPython,['-c',script],{input:JSON.stringify(stale),encoding:'utf8'}));
   assert.deepEqual(rows,wanted.map(([id,p])=>[id,p,'GUIDE']));
+});
+
+test('permanent builtin GT5 row cannot be persisted as REST through table edit or deletion',()=>{
+  const cfg={supportMapping:rootConfig({})};
+  const restBefore=JSON.stringify(cfg.supportMapping.kindProfiles.REST);
+  applySupportMappingRowPatch(cfg,'builtin-gt5-mds',{kind:'REST',priority:999,enabled:false});
+  let row=cfg.supportMapping.rules.find(r=>r.id==='builtin-gt5-mds');
+  assert.deepEqual([row.kind,row.priority,row.enabled],['GUIDE',140,true]);
+  assert.equal(JSON.stringify(cfg.supportMapping.kindProfiles.REST),restBefore);
+  removeSupportMappingRule(cfg,'builtin-gt5-mds');
+  row=cfg.supportMapping.rules.find(r=>r.id==='builtin-gt5-mds');
+  assert.deepEqual([row.kind,row.priority,row.enabled],['GUIDE',140,true]);
 });

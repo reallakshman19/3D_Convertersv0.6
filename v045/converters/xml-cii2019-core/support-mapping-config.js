@@ -336,7 +336,7 @@ export function supportMappingRowsForTable(config = {}) {
 
 export function applySupportMappingRowPatch(config, rowId, patch) {
   const supportMapping = migrateSupportMappingConfig(config);
-  const rules = supportMapping.rules.map((rule) => (rule.id === rowId ? normalizeSupportRuleForConfig({ ...rule, ...patch }) : rule));
+  const rules = enforceOwnerGtGuideRows(supportMapping.rules.map((rule) => (rule.id === rowId ? normalizeSupportRuleForConfig({ ...rule, ...patch }) : rule))).map(normalizeSupportRuleForConfig);
   const changedRule = rules.find((rule) => rule.id === rowId);
   if (changedRule) {
     const kind = changedRule.kind;
@@ -373,7 +373,7 @@ export function addSupportMappingRule(config, seed = {}) {
 
 export function removeSupportMappingRule(config, rowId) {
   const supportMapping = migrateSupportMappingConfig(config);
-  supportMapping.rules = supportMapping.rules.filter((rule) => rule.id !== rowId);
+  supportMapping.rules = enforceOwnerGtGuideRows(supportMapping.rules.filter((rule) => rule.id !== rowId)).map(normalizeSupportRuleForConfig);
   config.supportMapping = supportMapping;
   config.supportKindToXmlType = supportKindToXmlTypeFromMapping(supportMapping);
   return supportMapping;
