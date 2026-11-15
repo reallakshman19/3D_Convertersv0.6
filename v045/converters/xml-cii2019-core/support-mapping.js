@@ -133,9 +133,9 @@ function xmlPositionKey(positionText, tolerance) {
     .join('|');
 }
 
-function walkStagedComponents(value, branchName = '', out = []) {
+function walkStagedComponents(value, branchName = '', out = [], path = '$') {
   if (Array.isArray(value)) {
-    value.forEach((item) => walkStagedComponents(item, branchName, out));
+    value.forEach((item,index) => walkStagedComponents(item, branchName, out,`${path}[${index}]`));
     return out;
   }
   if (!value || typeof value !== 'object') return out;
@@ -144,8 +144,8 @@ function walkStagedComponents(value, branchName = '', out = []) {
   const currentBranch = (type === 'BRANCH' || Array.isArray(value.children))
     ? toText(value.name || attrs.NAME || branchName)
     : branchName;
-  out.push({ component: value, attrs, branchName: currentBranch });
-  if (Array.isArray(value.children)) value.children.forEach((child) => walkStagedComponents(child, currentBranch, out));
+  out.push({ component: value, attrs, branchName: currentBranch, path });
+  if (Array.isArray(value.children)) value.children.forEach((child,index) => walkStagedComponents(child, currentBranch, out,`${path}.children[${index}]`));
   return out;
 }
 
@@ -241,10 +241,13 @@ function isKindReference(value) {
   return !!(value && typeof value === 'object' && value[KIND_REF_FLAG]);
 }
 
-export function resolveXmlCiiSupportDescriptor(attrs, config = {}) {
+export function resolveXmlCiiSupportDescriptor(attrs, config = {}, onDecision) {
   const direct = normalizeSupportKind(attrs?.SUPPORT_KIND || attrs?.SUPPORT_MAPPER_KIND || attrs?.SUPPORT_TYPE);
   const directDescriptor = supportDescriptorFromKind(direct, attrs, 'explicit');
-  if (direct && direct !== 'REST') return directDescriptor;
+  if (direct && direct !== 'REST') {
+    onDecision?.({source:'explicit',rule:{id:'explicit-generated-kind',value:direct}});
+    return directDescriptor;
+  }
 
   const supportMapping = migrateSupportMappingConfig(config);
   const rules = supportRulesFromMapping(supportMapping);
@@ -255,18 +258,25 @@ export function resolveXmlCiiSupportDescriptor(attrs, config = {}) {
       defaultRules: [],
       kindMap: {},
       defaultKind: '',
+      onDecision,
     });
     if (descriptor?.primaryKind) return { ...descriptor, source: 'supportMapping' };
   }
 
   const legacyKind = normalizeSupportKind(resolveKindFromAttrs(ruleAttrs));
-  if (legacyKind) return { primaryKind: legacyKind, kinds: [legacyKind], dofs: {}, source: 'legacyRvmSupportMapper' };
-  if (directDescriptor) return directDescriptor;
+  if (legacyKind) {
+    onDecision?.({source:'legacyRvmSupportMapper',rule:{id:'resolveKindFromAttrs',evidenceStatus:'ROUTE_ONLY'}});
+    return { primaryKind: legacyKind, kinds: [legacyKind], dofs: {}, source: 'legacyRvmSupportMapper' };
+  }
+  if (directDescriptor) {
+    onDecision?.({source:'explicit',rule:{id:'explicit-generated-kind',value:direct}});
+    return directDescriptor;
+  }
   return { primaryKind: '', kinds: [], dofs: {}, source: 'none' };
 }
 
-export function resolveXmlCiiSupportKind(attrs, config = {}) {
-  return resolveXmlCiiSupportDescriptor(attrs, config).primaryKind || '';
+export function resolveXmlCiiSupportKind(attrs, config = {}, onDecision) {
+  return resolveXmlCiiSupportDescriptor(attrs, config, onDecision).primaryKind || '';
 }
 
 export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics = []) {
@@ -293,7 +303,8 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
 
   for (const entry of walkStagedComponents(parsed)) {
     const attrs = entry.attrs || {};
-    const descriptor = resolveXmlCiiSupportDescriptor(attrs, config);
+    let auditDecision=null;
+    const descriptor = resolveXmlCiiSupportDescriptor(attrs, config,decision=>{auditDecision=decision;});
     if (!descriptor.primaryKind) continue;
 
     let point = null;
@@ -314,6 +325,7 @@ export function buildStagedSupportIndex(stagedJsonText, config = {}, diagnostics
       kinds: descriptor.kinds?.length ? descriptor.kinds : [descriptor.primaryKind],
       dofs: descriptor.dofs || {},
       supportDescriptorSource: descriptor.source,
+      auditDecision,
       supportTags,
       supportBaseTags,
       point,

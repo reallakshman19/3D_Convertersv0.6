@@ -72,6 +72,19 @@ function unexplainedSlots(records,parsed) {
   return parsed.restraints.filter(r=>nodes.has(r.node)&&!matched.has(r.recordIndex));
 }
 
+// Field/pointer comparison shared with the observational active compatibility
+// journal. Full pre-Final verification still requires validateRestraintAuditSource.
+export function verifyRecordedRestraintFields(records,{ciiText,nativeXmlText,config={},finalizedGeometry=null}) {
+  const parsed=parseCiiEngineeringFields(ciiText);
+  if(!Number.isSafeInteger(parsed.restraintBlockCount))throw new Error('RESTRAINT_AUDIT_AUX_BLOCK_INVALID');
+  if(parsed.elements.some(e=>!Number.isSafeInteger(e.restraintPointer)||e.restraintPointer<0||e.restraintPointer>parsed.restraintBlockCount))
+    throw new Error('RESTRAINT_AUDIT_POINTER_INVALID');
+  const context={parsed,config,nativeXmlText,finalizedGeometry},cache={};
+  const checked=records.map(row=>inspectRecord(row,context,cache));
+  const extra=unexplainedSlots(checked,parsed);
+  return {records:checked,errors:extra.length?[{code:'RESTRAINT_AUDIT_UNEXPLAINED_SLOT',slots:extra}]:[]};
+}
+
 export async function verifyRestraintAudit({audit,xmlText,stagedJsonText='',config={},nativeXmlText,
   ciiText='',finalizedGeometry=null}) {
   if(!audit)return {schema:'XML229.RestraintAuditResult.v1',status:'NOT_RECORDED',

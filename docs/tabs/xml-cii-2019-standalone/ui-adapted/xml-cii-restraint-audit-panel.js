@@ -54,13 +54,13 @@ function renderRows(parent,rows) {
   parent.append(createElement('p',`Showing ${Math.min(rows.length,200)} of ${rows.length} field records. Downloads include all records.`),scroll);
 }
 
-function downloadButton(panel,label,kind,report,stateRef,status,initial) {
+function downloadButton(panel,label,kind,report,stateRef,status,initial,isCurrentAudit) {
   const button=createElement('button',label);button.type='button';
   button.dataset.action='download-restraint-audit-'+kind;
   button.addEventListener('click',async()=>{
     button.disabled=true;
     try {
-      if(!same(initial,snapshot(stateRef.current))||!await currentRestraintAudit(stateRef,report))throw new Error('stale');
+      if(!same(initial,snapshot(stateRef.current))||!await isCurrentAudit(stateRef,report))throw new Error('stale');
       const text=kind==='json'?JSON.stringify(report,null,2):kind==='csv'?restraintAuditCsv(report):restraintAuditHtml(report);
       const mime=kind==='json'?'application/json;charset=utf-8':kind==='csv'?'text/csv;charset=utf-8':'text/html;charset=utf-8';
       downloadTextFile('xml-cii-restraint-audit.'+kind,text,mime);
@@ -71,7 +71,7 @@ function downloadButton(panel,label,kind,report,stateRef,status,initial) {
   panel.appendChild(button);
 }
 
-export function renderRestraintAuditPanel(parent,{stateRef}) {
+export function renderRestraintAuditPanel(parent,{stateRef,isCurrentAudit=currentRestraintAudit}) {
   const panel=createElement('section'),title=createElement('h3','Restraint enrichment audit');
   panel.dataset.restraintAudit='true';panel.appendChild(title);parent.appendChild(panel);
   const report=restraintAuditFromResult(stateRef.current.result);
@@ -85,13 +85,13 @@ export function renderRestraintAuditPanel(parent,{stateRef}) {
     `${report.summary.verified} of ${report.summary.recorded} recorded restraints verified; ${report.summary.failed} failed.`));
   for(const error of report.errors||[])panel.appendChild(createElement('p',error.code||'Audit verification failed.'));
   const initial=snapshot(stateRef.current);
-  currentRestraintAudit(stateRef,report).then(current=>{
+  isCurrentAudit(stateRef,report).then(current=>{
     if(same(initial,snapshot(stateRef.current))&&!current)
       status.textContent='STALE — this audit belongs to an earlier source, configuration, Final review or output.';
   }).catch(()=>{status.textContent='Audit currency could not be verified.';});
   panel.appendChild(createElement('p','Saved source → rule → XML → CII evidence. Audit downloads contain private selected source values.'));
   for(const [kind,label] of [['json','Download audit JSON'],['csv','Download audit CSV'],['html','Download readable audit']])
-    downloadButton(panel,label,kind,report,stateRef,status,initial);
+    downloadButton(panel,label,kind,report,stateRef,status,initial,isCurrentAudit);
   const search=createElement('input');search.type='search';search.placeholder='Search node, source member, field or rule';
   search.setAttribute('aria-label','Search restraint audit');panel.appendChild(search);
   const body=createElement('div'),rows=restraintAuditRows(report);panel.appendChild(body);

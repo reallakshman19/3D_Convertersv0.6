@@ -123,25 +123,29 @@ function kindFromText(value) {
   return '';
 }
 
-export function tableSupportKind(attrs = {}, config = {}, onlyUserRows = false) {
+export function tableSupportKind(attrs = {}, config = {}, onlyUserRows = false, onDecision) {
   const f = fields(attrs);
   const evidence = {};
   for (const key of TABLE_FIELDS) if (f[key]) evidence[key] = f[key];
   if (!DESCRIPTION_KEYS.some((key) => evidence[key]) && evidence.MDSDTXR) evidence.DESCRIPTION = evidence.MDSDTXR;
   let first = null;
+  let firstValue;
   const isUserRow = (rule) => !/^(?:builtin-|standalone-mds-)/.test(rule.id);
   for (const rule of tableRules(config).filter((row) => !onlyUserRows || isUserRow(row))) {
     if (first && rule.priority !== first.priority) break;
     if (!SUPPORT_KINDS.includes(rule.kind)) continue;
-    if (!ruleValues(evidence, rule).some((value) => ruleMatches(rule, value))) continue;
-    if (!first) { first = rule; continue; }
+    const values=ruleValues(evidence,rule),matched=values.findIndex(value=>ruleMatches(rule,value));
+    if (matched<0) continue;
+    if (!first) { first = rule; firstValue=values[matched]; continue; }
     if (rule.kind !== first.kind) {
       throw refuse('PREFINAL_RESTRAINT_KIND_AMBIGUOUS', `Step 7 rows ${first.id} and ${rule.id} have equal priority and different kinds`);
     }
   }
-  if (first) return first.kind;
+  if (first) { onDecision?.({rule:{...first,value:firstValue}}); return first.kind; }
   if (onlyUserRows) return '';
-  return kindFromText(Object.values(evidence).join(' '));
+  const value=Object.values(evidence).join(' '),kind=kindFromText(value);
+  if(kind)onDecision?.({rule:{id:'table-keyword-fallback',value}});
+  return kind;
 }
 
 export function generatedSupportKind(attrs = {}) {
@@ -153,7 +157,7 @@ export function generatedSupportKind(attrs = {}) {
   return '';
 }
 
-export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED) {
+export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED, onDecision) {
   const byNodeType = nodeTypeSupportKind(attrs, config);
   if (byNodeType && governed.includes(byNodeType)) {
     // A user-authored Step 7 row that names this member as another governed
@@ -162,17 +166,24 @@ export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED
     if (governed.includes(userKind) && userKind !== byNodeType) {
       throw refuse('PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT', `NODETYPE gives ${byNodeType} but a Step 7 user row gives ${userKind}`);
     }
+    onDecision?.({kind:byNodeType,source:'NODETYPE',rule:{id:'source-NODETYPE',field:'NODETYPE',value:text(fields(attrs).NODETYPE)}});
     return { kind: byNodeType, source: 'NODETYPE' };
   }
   const described = describedKinds(attrs);
   if (described.length > 1) return { kind: '', source: 'description-conflict' };
-  const byTable = tableSupportKind(attrs, config);
+  let tableDecision;
+  const byTable = tableSupportKind(attrs, config,false,decision=>{tableDecision=decision;});
   if (byTable) {
     if (described.length === 1 && byTable !== described[0]) return { kind: '', source: 'description-conflict' };
-    return governed.includes(byTable) ? { kind: byTable, source: 'step7-support-table' } : { kind: '', source: 'step7-not-governed' };
+    const decision=governed.includes(byTable) ? { kind: byTable, source: 'step7-support-table' } : { kind: '', source: 'step7-not-governed' };
+    onDecision?.({...decision,...tableDecision});
+    return decision;
   }
   const generated = generatedSupportKind(attrs);
-  if (governed.includes(generated)) return { kind: generated, source: 'generated-label' };
+  if (governed.includes(generated)) {
+    onDecision?.({kind:generated,source:'generated-label',rule:{id:'generated-label',value:generated}});
+    return { kind: generated, source: 'generated-label' };
+  }
   return { kind: '', source: '' };
 }
 
