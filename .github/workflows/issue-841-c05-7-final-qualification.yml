@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   c05-current-node:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout exact PR head
@@ -42,7 +42,7 @@ jobs:
             tests/xml-cii-workflow-job-dataset-materialization.test.mjs
 
   p0-applicable:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout exact PR head
@@ -151,7 +151,7 @@ jobs:
           if-no-files-found: error
 
   worker-line-list:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout exact PR head
@@ -237,7 +237,7 @@ jobs:
           if-no-files-found: error
 
   c05-browser:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - name: Checkout exact PR head
@@ -281,7 +281,7 @@ jobs:
           if-no-files-found: error
 
   c05-ledger-mirror:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout exact PR head

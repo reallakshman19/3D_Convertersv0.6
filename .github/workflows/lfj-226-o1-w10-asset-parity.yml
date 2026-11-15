@@ -14,7 +14,7 @@ permissions:
   contents: read
 jobs:
   actual-entry-asset-and-refusal:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:
       fail-fast: false
@@ -28,7 +28,7 @@ jobs:
           fetch-depth: 0
       - name: Assert direct-main candidate and test script parse
         run: |
-          test "$(git merge-base HEAD origin/main)" = "4f14beb37bc0b719453c52a116c1c5d7183d2fd0"
+          git merge-base --is-ancestor origin/main HEAD
           node --check scripts/lfj-226-o1-w10-asset-parity-browser.mjs
           echo "W10_HEAD=$(git rev-parse HEAD)"
           git status --short

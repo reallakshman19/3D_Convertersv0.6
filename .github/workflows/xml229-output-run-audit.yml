@@ -22,7 +22,7 @@ on:
       - '.github/workflows/xml229-output-run-audit.yml'
 jobs:
   node:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     strategy:
       fail-fast: false
@@ -37,7 +37,7 @@ jobs:
         run: node --test tests/xml229-run-hold-audit.test.mjs tests/xml-cii-229-canonical-readiness-worker.test.mjs tests/xml-cii-229-engineering-basis-authority.test.mjs tests/xml229-cross-worker-flow-audit.test.mjs tests/xml229-native-owner-blocker-evidence.test.mjs
   chromium:
     needs: node
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
