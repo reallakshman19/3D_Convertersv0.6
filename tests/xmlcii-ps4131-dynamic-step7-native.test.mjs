@@ -47,7 +47,7 @@ function baseConfig(){
 function caseConfig(mode){
   const cfg=baseConfig();
   if(mode==='audit-signature-reconstruction'){
-    // Reconstruct the observed GT5 rule only; not the unavailable PC config.
+    // Reconstruct the invalid saved GT5 rule. Owner's permanent policy must repair it.
     cfg.supportMapping.rules=cfg.supportMapping.rules.map(r=>r.id==='builtin-gt5-mds'?{...r,kind:'REST'}:r);
   }
   if(mode==='arbitrary-field-control'){
@@ -92,7 +92,7 @@ function nativeEngine(t,receipt){
     const elements=parsed.elements.filter(e=>e.branch===originalBranch);
     const nearby=new Set([...targetNodes,...elements.filter(e=>targetNodes.includes(e.from)||targetNodes.includes(e.to))
       .flatMap(e=>[e.from,e.to])]);
-    receipt.native={sha256:hash(ciiText),targetSlots:parsed.restraints.filter(s=>targetNodes.includes(s.node)),
+    receipt.native={sha256:hash(ciiText),ps4122Slots:parsed.restraints.filter(s=>['3260','3270','3280'].includes(s.node)),targetSlots:parsed.restraints.filter(s=>targetNodes.includes(s.node)),
       nearbySlots:parsed.restraints.filter(s=>nearby.has(s.node)),
       targetElements:elements.filter(e=>targetNodes.includes(e.from)||targetNodes.includes(e.to))
         .map(({index,from,to,restraintPointer})=>({index,from,to,restraintPointer}))};
@@ -136,11 +136,16 @@ for(const mode of ['shipped-table','audit-signature-reconstruction','mapper-defa
     assert.equal(receipt.engineInput.stagedSha256,hash(jsonBytes));
     assert.equal(receipt.engineInput.config.enabled,true);
     assert.ok(receipt.native.targetSlots.length>0,'No native CII slot observed at target node numbers');
+    const guide4122=receipt.native.ps4122Slots.filter(s=>s.typeCode===8);
+    assert.equal(guide4122.length,1,'PS4122 must have exactly one native GUIDE');
+    assert.equal(guide4122[0].gap,10,'GT571 original explicit guide gap must survive');
+    console.log('PS4122_NATIVE '+JSON.stringify(receipt.native.ps4122Slots));
     if(mode==='audit-signature-reconstruction'){
-      assert.deepEqual(receipt.decisions.map(d=>d.kind),['REST','REST','LINESTOP']);
+      assert.deepEqual(receipt.decisions.map(d=>d.kind),['REST','GUIDE','LINESTOP']);
       assert.deepEqual(receipt.decisions.map(d=>d.rule),['builtin-user-rest','builtin-gt5-mds','standalone-mds-st-linestop']);
-      assert.ok(receipt.native.targetSlots.every(s=>s.typeCode!==8),'Saved GT570 REST must remain authoritative');
+      assert.ok(receipt.native.targetSlots.some(s=>s.typeCode===8),'Owner policy must repair the old saved GT570 REST mapping');
       assert.ok(receipt.native.targetSlots.some(s=>s.typeCode===9),'Visible default ST rule must generate LIM');
+      assert.deepEqual(receipt.native.targetSlots.map(s=>s.typeCode).sort((a,b)=>a-b),[8,9,14]);
     }
     if(mode==='mapper-default-control'||mode==='shipped-table'||mode==='arbitrary-field-control'){
       assert.deepEqual(receipt.decisions.map(d=>d.kind),['REST','GUIDE','LINESTOP']);

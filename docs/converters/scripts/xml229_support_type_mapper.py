@@ -513,6 +513,26 @@ def _mds_seed_enabled(row, config):
                for a in group['aliases'])
 
 
+# Owner 15 Nov 2026: permanent built-in GT5/GT GUIDE table policy.
+_GT_GUIDE_PRIORITIES = {'builtin-gt5-cmp': 130, 'builtin-gt5-mds': 140,
+                        'builtin-gt5-text': 150, 'builtin-gt-mds': 160}
+
+
+def _enforce_owner_gt_guide_rows(rows):
+    canonical = {r['id']: {**r, 'priority': _GT_GUIDE_PRIORITIES[r['id']],
+                           'source': 'all', 'enabled': True, 'kind': 'GUIDE'}
+                 for r in TABLE_DEFAULT_RULES if r['id'] in _GT_GUIDE_PRIORITIES}
+    seen = set()
+    corrected = []
+    for row in rows:
+        ident = row.get('id') if isinstance(row, dict) else None
+        if ident in canonical:
+            seen.add(ident)
+            row = {**row, **canonical[ident]}
+        corrected.append(row)
+    return corrected + [r for ident, r in canonical.items() if ident not in seen]
+
+
 def table_rules(config):
     """Enabled Step 7 rows for staged JSON, in priority order (as JS tableRules)."""
     mapping = (config or {}).get('supportMapping')
@@ -534,7 +554,7 @@ def table_rules(config):
     ids = {_owner_text(r.get('id')) for r in merged if isinstance(r, dict)}
     merged += [r for r in _STEP7_MDS_SEEDS if r['id'] not in ids and _mds_seed_enabled(r, config)]
     rows = []
-    for index, rule in enumerate(merged):
+    for index, rule in enumerate(_enforce_owner_gt_guide_rows(merged)):
         rule = rule if isinstance(rule, dict) else {}
         priority = _js_number(rule.get('priority')) if 'priority' in rule else None
         if priority is None:

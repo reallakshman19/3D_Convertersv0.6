@@ -286,9 +286,11 @@ def append_profile(node, kind, attrs, config, allowed=None):
     p = profile_for(kind, config)
     ns = node.tag.rsplit('}', 1)[0] + '}' if '}' in node.tag else ''
     d = direction(p, attrs, node)
-    raw = source_gap(attrs) if kind in ('REST', 'GUIDE', 'LINESTOP') else ''
-    gap = str(numeric(raw)) if raw else text(p.get('gap')) or '0'
-    node_gap = next((field(node, k) for k in ('CMPSUPGAP', 'CMPSUPGAP_POS', 'CMPSUPGAP_PS') if field(node, k)), '')
+    raw = source_gap(attrs)
+    require_gap = numeric(raw) if raw else 0
+    if require_gap is None or not math.isfinite(require_gap):
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
+    gap = str(require_gap)
     original_type = node_type_mutation(attrs, config)
     if original_type in ('+Y','GUI','LIM') and original_type != {
             'REST':'+Y','GUIDE':'GUI','LINESTOP':'LIM'}[kind]:
@@ -301,12 +303,12 @@ def append_profile(node, kind, attrs, config, allowed=None):
             friction = text(p['fixedFriction'])
         elif p['frictionMode'] == 'sentinel' and config.get('useFrictionSentinelForNonYSupports') is not False and typ not in ('Y', '+Y'):
             friction = '-1.010100'
-        actual_gap = str(numeric(node_gap)) if typ in ('GUI', 'LIM') and not raw and numeric(gap) == 0 and node_gap else gap
+        actual_gap = gap
         values = [('Type', typ), ('Stiffness', text(p['stiffness']) if text(p['stiffness']) not in ('', 'default')
                   else text(config.get('defaultStiffness')) or '1.751270E+12'),
                   ('Gap', actual_gap), ('Friction', friction)]
-        if (raw and typ in ('GUI', 'LIM')) or (typ in ('GUI', 'LIM') and node_gap):
-            values.append(('CMPSUPGAP', raw or node_gap))
+        if raw:
+            values.append(('CMPSUPGAP', raw))
         if d:
             values.extend(('DirectionCosine' + axis, f'{v:.9f}') for axis, v in zip('XYZ', d))
         r = ET.SubElement(node, ns + 'Restraint')

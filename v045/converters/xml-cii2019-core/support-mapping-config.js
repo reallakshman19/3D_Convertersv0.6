@@ -190,9 +190,28 @@ function mdsSeedEnabled(row,config) {
   return group.aliases.some(a=>toText(a).toUpperCase().replace(/\*/g,'')===row.pattern);
 }
 
+// Owner 15 Nov 2026: these four built-in Step 7 rows are permanent.
+const GT_GUIDE_PRIORITIES = Object.freeze({
+  'builtin-gt5-cmp':130, 'builtin-gt5-mds':140,
+  'builtin-gt5-text':150, 'builtin-gt-mds':160,
+});
+
+function enforceOwnerGtGuideRows(rows) {
+  const canonical=new Map(DEFAULT_RULES.filter(r=>Object.hasOwn(GT_GUIDE_PRIORITIES,r.id))
+    .map(r=>[r.id,{...r,priority:GT_GUIDE_PRIORITIES[r.id],source:'all',enabled:true,kind:'GUIDE'}]));
+  const seen=new Set();
+  const corrected=rows.map(rule=>{
+    const fixed=canonical.get(rule?.id);
+    if(!fixed)return rule;
+    seen.add(rule.id);
+    return {...rule,...fixed};
+  });
+  return [...corrected,...[...canonical.values()].filter(r=>!seen.has(r.id))];
+}
+
 function completeStep7Rules(rows,config) {
   const ids=new Set(rows.map(r=>toText(r?.id)));
-  return [...rows,...DEFAULT_STEP7_MDS_ROWS.filter(r=>!ids.has(r.id)&&mdsSeedEnabled(r,config))];
+  return enforceOwnerGtGuideRows([...rows,...DEFAULT_STEP7_MDS_ROWS.filter(r=>!ids.has(r.id)&&mdsSeedEnabled(r,config))]);
 }
 
 export function defaultSupportKindProfiles(config = {}) {
@@ -246,7 +265,7 @@ export function normalizeSupportKindProfile(profile = {}, fallback = {}) {
     directionMode: normalizeDirectionMode(profile.directionMode ?? fallback.directionMode),
     direction,
     stiffness: toText(profile.stiffness ?? fallback.stiffness ?? 'default') || 'default',
-    gap: toText(profile.gap ?? fallback.gap ?? '0'),
+    gap: '0',
     frictionMode: normalizeFrictionMode(profile.frictionMode ?? fallback.frictionMode),
     fixedFriction: toText(profile.fixedFriction ?? fallback.fixedFriction ?? ''),
     supportTagMode: normalizeSupportTagMode(profile.supportTagMode ?? fallback.supportTagMode),
@@ -317,7 +336,7 @@ export function supportMappingRowsForTable(config = {}) {
 
 export function applySupportMappingRowPatch(config, rowId, patch) {
   const supportMapping = migrateSupportMappingConfig(config);
-  const rules = supportMapping.rules.map((rule) => (rule.id === rowId ? normalizeSupportRuleForConfig({ ...rule, ...patch }) : rule));
+  const rules = enforceOwnerGtGuideRows(supportMapping.rules.map((rule) => (rule.id === rowId ? normalizeSupportRuleForConfig({ ...rule, ...patch }) : rule))).map(normalizeSupportRuleForConfig);
   const changedRule = rules.find((rule) => rule.id === rowId);
   if (changedRule) {
     const kind = changedRule.kind;
@@ -354,7 +373,7 @@ export function addSupportMappingRule(config, seed = {}) {
 
 export function removeSupportMappingRule(config, rowId) {
   const supportMapping = migrateSupportMappingConfig(config);
-  supportMapping.rules = supportMapping.rules.filter((rule) => rule.id !== rowId);
+  supportMapping.rules = enforceOwnerGtGuideRows(supportMapping.rules.filter((rule) => rule.id !== rowId)).map(normalizeSupportRuleForConfig);
   config.supportMapping = supportMapping;
   config.supportKindToXmlType = supportKindToXmlTypeFromMapping(supportMapping);
   return supportMapping;
