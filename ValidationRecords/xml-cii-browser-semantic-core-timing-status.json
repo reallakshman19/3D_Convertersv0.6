@@ -1,7 +1,7 @@
 {
   "schema": "XMLCII_BROWSER_TIMING_RUN_STATUS_V1",
-  "sourceSha": "9c88cd9f62aad32171fafd596c48cc8bc72b465e",
-  "installOutcome": "success",
+  "sourceSha": "620614dedbc43c7fe2da179350b2bad3e55fd670",
+  "installOutcome": "failure",
   "serverOutcome": "success",
-  "timingOutcome": "success"
+  "timingOutcome": "failure"
 }
