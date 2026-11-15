@@ -1,16 +1,31 @@
 # PR6 — restore XML229 browser CI execution after PR #5
 
-HANDOVER_READINESS: READY_FOR_REVIEW_CHECKS_PENDING
+HANDOVER_READINESS: COORDINATION_REQUIRED
 PR_RECOVERY_STATE: RECOVERABLE
 TAKEOVER_AUTHORITY: RESTRICTED_TO_CI_RUNNER_CONFIGURATION
 CRITICALITY: STANDARD (CI infrastructure only; engineering acceptance remains HOLD)
 WORK_INTENT: IMPLEMENT / VALIDATE / OPEN_DRAFT
 WORKING_BRANCH: codex/pr5-ci-browser-recovery
 MAIN_HEAD_LAST_CHECKED: fa54925905c42e2591ca42e5ddafe4ea1f2952aa
-CURRENT_STAGE: DRAFT_OPEN_REMOTE_CHECKS_PENDING
+CURRENT_STAGE: REBASED_SCOPE_CI_REPAIR_VERIFIED_PRODUCT_HOLD
 PREDECESSOR: PR5 (merged); preserve source-census and JSON admission changes
 APPENDIX_A_STATUS: NOT_APPLICABLE to production takeover; no production mutation authorized
 MERGE_AUTHORITY: OWNER_ONLY
+
+## 2026-11-15 owner correction and revised incident baseline (supersedes older incident hypotheses)
+
+- Owner confirmed original cross-PC PS-4102 discrepancy was due to "Use JSON/support mapper for restraints" being OFF. JSON indexing success did not mean mapper was enabled. Do not describe the original case as a proved classification, geometry or runtime defect. Configuration awareness is the preventive requirement. No release approval implied.
+- Owner supplied a new issue document, "Unable to download Audit Json still". Three product requirements: (R1) actual audit JSON download remains broken; (R2) turn JSON restraint mapping ON by default when JSON is loaded; (R3) PS-4131 REST/GT570/ST570 case reports all REST and lacks expected GUI/LIM. Do not conflate R3 with the resolved PS-4102 configuration cause. No private raw document contents or sharing URL copied to the repository.
+- R3 evidence (owner-reported audit): distinct co-located source occurrences at nodes 3760/3770/3780; PIPE-REST -> REST; GT570 -> REST with rule builtin-gt5-mds; ST570 -> REST with rule generated-label. All three expectations are +Y on all three targets. Expected engineering kinds per owner: REST/GUI/LIM. These observations establish a discrepancy; the exact consumed Step 7 table is not yet available. PR1 explicitly preserves saved GT5 REST edits; first verify whether the GT570 result is a saved intentional/incorrect rule, not a default-rule or writer defect. The v045 closure returns governedSupportKind before MDSSUPPTYPE GT/ST fallback; generated REST can preempt code fallback, which is a concrete ST570 hypothesis, not yet reproduced with actual config.
+- R1 inspect actual current vs recorded-diagnostic download, currency code, browser download event and nonempty parseable JSON. Main adapted DOM helper revokes its object URL immediately; PR7/PR4 propose delayed revoke. This is a candidate fix, not proof of the reported real-browser failure. Preserve stale-report guard and diagnostic-only watermark.
+- R2 default config migration already enables missing booleans, but persisted explicit false survives. Need test fresh and previously-OFF PCs on committed valid JSON, reload/restore, XML-only without JSON and intentional per-run OFF. Capture effective config and display it before Run. Owner explicitly requested default ON on JSON load; do not silently overwrite a deliberate current-run choice after loading.
+- R3 reproduce with JSON mapper ON and record exact config, matched rule kind, original source occurrence, enriched XML and native CII slots. Independent expected codes 14/8/9; no hardcoded production node numbers; no invented gaps. Verify independent source coverage cannot mark REST as evidence for GUI/LIM. Preserve owner NODETYPE precedence, existing XML preservation and unit/topology/runtime authority.
+
+## Live Git reconciliation and CI outcome
+
+- main remains fa54925905c42e2591ca42e5ddafe4ea1f2952aa. At pre-rebaseline PR6 head 8b851faaf6c56cda667064e4db060012b1f4304d, compare shows 2 ahead / 0 behind, merge base equals current main. No Git history rewrite necessary. This checkpoint is scope/decision rebaseline only.
+- PR7 (draft, head 9fe6b0df362ebe16d91a27439f31bb22d14b9945) overlaps all three PR6 workflow files, pins additional nonbrowser jobs and other workflows; also changes audit Blob lifetime, source ownership, diagnostic allowlist and branch-format mirror. PR4 overlaps its audit changes; PR1 owns mapper precedence changes. Classification: COORDINATION_REQUIRED. Do not merge PR6 and PR7 blindly or alter their branches without coordination. Recommend one integration owner select/compose changes; PR6 stays draft as isolated CI evidence until disposition.
+- Exact pre-rebaseline head CI: 32 runs, 13 success, 19 failure. [HOLD audit](https://github.com/reallakshman19/3D_Convertersv0.6/actions/runs/43698471620) PASS (Node 22/24 and actual Chromium). [Full regression](https://github.com/reallakshman19/3D_Convertersv0.6/actions/runs/43698471724) FAIL; both Node engineering gates and both Chromium installations PASS; both real-browser application jobs FAIL. BC4 log [132764192782](https://github.com/reallakshman19/3D_Convertersv0.6/actions/runs/43698471724/job/132764192782) times out waiting for data-action=xml229-output-participation in scripts/xml229-issue376-ui-click-e2e.mjs:14 on XML-only flow. This is separate from reported PS-4131. Published smoke not run on draft. New metadata-only head must not inherit exact-head qualification automatically.
 
 ## Mission and isolation
 
@@ -36,8 +51,8 @@ PR: https://github.com/reallakshman19/3D_Convertersv0.6/pull/6 (open draft; not 
 ## Validation
 - PASS / LOCAL_EXECUTION / independent structural oracle: parsed original and candidate YAML using PyYAML; restored candidate runner label to old value in parsed representation and asserted entire structures equal for each of three workflows. Verified candidate label and original Git blob IDs. No assertions changed.
 - PASS / SOURCE_INSPECTION: Playwright documentation confirms Ubuntu 24.04 compatibility in earlier release; failure logs confirm 26.04 installation incompatibility.
-- NOT_RUN / REMOTE_EXECUTION: GitHub Actions on candidate head, actual Chromium installation, root/docs browser tests, published smoke after eventual authorized merge. Full clone blocked by container DNS; local source checkout limited to exact workflow bytes and backup utility.
-- NOT_RUN / ENGINEERING: actual PSI-02/STF benchmark, cross-PC equivalence, independent engineering acceptance. Original issue remains HOLD.
+- SUPERSEDED HISTORICAL SNAPSHOT / REMOTE_EXECUTION: initial checks were pending; see live CI outcome above for the exact implementation-equivalent pre-rebaseline head. Published smoke remains NOT_RUN. Full clone blocked by container DNS; local source checkout limited to exact workflow bytes and backup utility.
+- NOT_RUN / ENGINEERING: actual PSI-02/STF benchmark, cross-PC equivalence, independent engineering acceptance. Original cross-PC cause corrected by owner; new product issues and engineering acceptance remain HOLD.
 
 ## Outstanding recovery work (not addressed by this PR)
 - WP-01 remaining: classify all historic pinned-base and scope-only workflows and extend runner repair to other applicable jobs after inspecting each contract; do not disable genuine regression protection.
@@ -47,4 +62,4 @@ PR: https://github.com/reallakshman19/3D_Convertersv0.6/pull/6 (open draft; not 
 
 HIGHEST_RISK: restored browser execution may reveal genuine engineering regressions; do not equate runner compatibility or successful deployment with engineering acceptance.
 
-EXACT_NEXT_ACTION: inspect PR6 final-head HOLD and full-regression workflow jobs after they execute; record installation and application results separately, keep draft until reviewed. Published smoke is workflow_run after an authorized main deployment and cannot be claimed passed premerge. Do not merge without owner authorization.
+EXACT_NEXT_ACTION: coordinate PR1/4/7 before production mutation; first reproduce R3 using the actual saved Step 7 table with mapper ON, capturing GT570 and ST570 rule decisions separately, then isolate wrong configuration versus code fallback and verify R1/R2 in the active browser path. Keep PR6 draft as CI-only evidence until owner decides integration disposition. Do not merge without owner authorization.
