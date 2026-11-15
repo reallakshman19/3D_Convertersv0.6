@@ -32,3 +32,6 @@ EXACT_NEXT_ACTION: add exact-source native regression and dynamic named/wildcard
 
 ## Executable verification checkpoint
 Added tests/xml229-step7-dynamic-authority.test.mjs (literal arbitrary named fields, wildcard, scopes, matches, priority, saved edits, Preview and Python parity); tests/xmlcii-ps4131-dynamic-step7-native.test.mjs (exact committed full PSI-02/STF, four configurations, native slots). Existing HOLD gate imports these plus existing owner precedence and Step78 tests; no workflow edits. No original tests weakened. Prior reproduction test remains unchanged on its separate branch. Actual PC config still unavailable. Exact-head test execution NOT_RUN at commit time.
+
+## Test authoring correction
+First candidate CI 43704023957 failed at test module parse (regex replacement expanded a $ sequence in the generated test text). Corrected only the test syntax and duplicated suffix; literal expected engineering results unchanged. Exact-head rerun required. No production claim from the failed run.

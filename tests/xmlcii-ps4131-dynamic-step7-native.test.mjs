@@ -43,12 +43,16 @@ function baseConfig(){
 function caseConfig(mode){
   const cfg=baseConfig();
   if(mode==='audit-signature-reconstruction'){
-    // The reported rule ID returned REST; intentionally reconstruct just that
-    // decision. This is NOT the unavailable saved configuration from the PC.
+    // Reconstruct the observed GT5 rule only; not the unavailable PC config.
     cfg.supportMapping.rules=cfg.supportMapping.rules.map(r=>r.id==='builtin-gt5-mds'?{...r,kind:'REST'}:r);
   }
   if(mode==='arbitrary-field-control'){
-    cfg.supportMapping.rules.unshift({id:'owner-function-stop',priority:1,source:'staged-json',field:'MDSSUPPFUNC,OWNER',match:'equals',pattern:'ST',kind:'LINESTOP'},{id:'owner-function-guide',priority:2,source:'staged-json',field:'MDSSUPPFUNC',match:'regex',pattern:'^GT(runStandaloneSupportTypeMapper({supportConfigJson:JSON.stringify(cfg)}).supportConfigJson);
+    cfg.supportMapping.rules.unshift(
+      {id:'owner-function-stop',priority:1,source:'staged-json',field:'MDSSUPPFUNC,OWNER',match:'equals',pattern:'ST',kind:'LINESTOP'},
+      {id:'owner-function-guide',priority:2,source:'staged-json',field:'MDSSUPPFUNC',match:'regex',pattern:'^GT$',kind:'GUIDE'});
+  }
+  if(mode==='mapper-default-control'){
+    return JSON.parse(runStandaloneSupportTypeMapper({supportConfigJson:JSON.stringify(cfg)}).supportConfigJson);
   }
   return cfg;
 }
@@ -139,102 +143,6 @@ for(const mode of ['shipped-table','audit-signature-reconstruction','mapper-defa
       const actual=new Set(receipt.native.targetSlots.map(s=>s.typeCode));
       for(const code of [14,8,9])assert.ok(actual.has(code),'Missing independent expected native code '+code);
       if(mode==='arbitrary-field-control')assert.deepEqual(receipt.decisions.slice(1).map(d=>d.rule),['owner-function-guide','owner-function-stop']);
-    }
-  });
-}
-,kind:'GUIDE'});
-  }
-  if(mode==='mapper-default-control'){
-    return JSON.parse(runStandaloneSupportTypeMapper({supportConfigJson:JSON.stringify(cfg)}).supportConfigJson);
-  }
-  return cfg;
-}
-function decisions(config){
-  return members.map((m,i)=>{
-    let d;
-    const kind=supportKindFromMember({raw:m,capturedFields:m.attributes},config,v=>{d=v;});
-    return {source:names[i],path:'$[14].children['+[7,9,10][i]+']',mds:m.attributes.MDSSUPPTYPE,
-      kind,rule:d?.rule?.id,matched:d?.rule?.value,ruleKind:d?.rule?.kind};
-  });
-}
-function selectedConfig(config){
-  const mapping=migrateSupportMappingConfig(config);
-  return {sha256:hash(JSON.stringify(config)),enabled:mapping.useJsonForRestraints,
-    rules:mapping.rules.filter(r=>/gt|st|rest|guide|limit/i.test(r.id))
-      .map(({id,kind,field,match,pattern,priority,enabled})=>({id,kind,field,match,pattern,priority,enabled}))};
-}
-function nativeEngine(t,receipt){
-  const dir=mkdtempSync(join(tmpdir(),'ps4131-proof-'));
-  t.after(()=>rmSync(dir,{recursive:true,force:true}));
-  return async job=>{
-    const inputPath=join(dir,'input.xml'),stagedJsonPath=join(dir,'stage.json');
-    writeFileSync(inputPath,job.sourceText);writeFileSync(stagedJsonPath,job.stagedJsonText);
-    receipt.engineInput={sha256:hash(job.sourceText),rows:xmlRows(job.sourceText),
-      stagedSha256:hash(job.stagedJsonText),config:selectedConfig(JSON.parse(job.supportConfigJson)),options:job.options};
-    console.log('PS4131_ENGINE_INPUT '+JSON.stringify(receipt.engineInput));
-    const invocation=buildStandaloneCiiInvocation(job,{inputPath,stagedJsonPath},dir.replaceAll('\\','/'));
-    const script=fileURLToPath(new URL('../v045/converters/scripts/'+basename(invocation.scriptPath),import.meta.url));
-    execFileSync(process.env.PYTHON||'python3',[script,...invocation.argv.slice(1)],
-      {encoding:'utf8',maxBuffer:32*1024*1024,stdio:['ignore','pipe','pipe'],timeout:180000});
-    const ciiText=readFileSync(invocation.outputPath,'utf8');
-    const parsed=parseCiiEngineeringFields(ciiText);
-    const elements=parsed.elements.filter(e=>e.branch===originalBranch);
-    const nearby=new Set([...targetNodes,...elements.filter(e=>targetNodes.includes(e.from)||targetNodes.includes(e.to))
-      .flatMap(e=>[e.from,e.to])]);
-    receipt.native={sha256:hash(ciiText),targetSlots:parsed.restraints.filter(s=>targetNodes.includes(s.node)),
-      nearbySlots:parsed.restraints.filter(s=>nearby.has(s.node)),
-      targetElements:elements.filter(e=>targetNodes.includes(e.from)||targetNodes.includes(e.to))
-        .map(({index,from,to,restraintPointer})=>({index,from,to,restraintPointer}))};
-    console.log('PS4131_NATIVE '+JSON.stringify(receipt.native));
-    return {ok:true,enrichedText:job.sourceText,ciiText,logs:[],diagnostics:{}};
-  };
-}
-function summarizeAudit(report){
-  return {status:report?.status,summary:report?.summary,
-    coverage:report?.coverage?.sources?.filter(s=>names.includes(s.fields?.NAME)).map(s=>({path:s.path,
-      kind:s.kind,status:s.status,rule:s.decision?.rule?.id,
-      candidates:s.candidates?.map(c=>({node:c.target?.nodeNumber,method:c.method,entries:c.entries}))})),
-    records:report?.records?.filter(r=>names.includes('/'+String(r.target?.nodeName||'').replace(/^\//,''))||
-      targetNodes.includes(r.target?.nodeNumber)).map(r=>({node:r.target.nodeNumber,kind:r.after?.Type,gap:r.after?.Gap,
-      status:r.status,mapping:r.mapping?.node,observed:r.observed?{node:r.observed.node,typeCode:r.observed.typeCode,
-        gap:r.observed.gap,blockIndex:r.observed.blockIndex,slotIndex:r.observed.slotIndex}:null}))};
-}
-test('PS4131 original committed source identity and separate occurrence custody',()=>{
-  assert.equal(blobHash(xmlBytes),'8c60c9e58995172d48a9d1ebfa23569db5659f06');
-  assert.equal(blobHash(jsonBytes),'c611f53d6571cae7df51d9ac817a723be493b952');
-  assert.deepEqual(members.map(m=>m.attributes.NAME),names);
-  assert.deepEqual(members.map(m=>m.attributes.MDSSUPPTYPE),['PIPE-REST','GT570','ST570']);
-  assert.ok(members.every(m=>m.attributes.SUPPORT_KIND==='REST'));
-  assert.deepEqual(xmlRows(sourceText).map(r=>r.node),targetNodes);
-  assert.ok(xmlRows(sourceText).every(r=>r.restraints.length===0));
-  console.log('PS4131_SOURCE '+JSON.stringify({xmlSha256:hash(xmlBytes),jsonSha256:hash(jsonBytes),
-    branch:originalBranch,rows:xmlRows(sourceText),memberPaths:[7,9,10]}));
-});
-for(const mode of ['shipped-table','audit-signature-reconstruction','mapper-default-control']){
-  test('PS4131 actual committed full source, mapper ON, '+mode,{timeout:240000},async t=>{
-    const config=caseConfig(mode),receipt={mode,config:selectedConfig(config),decisions:decisions(config)};
-    console.log('PS4131_CLASSIFIER '+JSON.stringify(receipt));
-    const input={sourceKind:'xml',sourceName:'GLRD-1000-PSI-02.xml',sourceText,stagedJsonText,
-      supportConfigJson:JSON.stringify(config),options:{outputMode:'both',splitCondensedValveFlange:false,
-        useRestraintTypeBasedOnJson:true}};
-    const result=await runXmlCii2019Workflow(input,{engineRunner:nativeEngine(t,receipt)});
-    receipt.ok=result.ok;receipt.error=result.ok?null:String(result.error||'unknown').slice(0,800);
-    receipt.audit=summarizeAudit(result.restraintAudit);
-    console.log('PS4131_RESULT '+JSON.stringify(receipt));
-    assert.equal(result.ok,true,receipt.error);
-    assert.equal(receipt.engineInput.stagedSha256,hash(jsonBytes));
-    assert.equal(receipt.engineInput.config.enabled,true);
-    assert.ok(receipt.native.targetSlots.length>0,'No native CII slot observed at target node numbers');
-    if(mode==='audit-signature-reconstruction'){
-      assert.deepEqual(receipt.decisions.map(d=>d.kind),['REST','REST','LINESTOP']);
-      assert.deepEqual(receipt.decisions.map(d=>d.rule),['builtin-user-rest','builtin-gt5-mds','standalone-mds-st-linestop']);
-      assert.ok(receipt.native.targetSlots.every(s=>s.typeCode!==8),'Saved GT570 REST must remain authoritative');
-      assert.ok(receipt.native.targetSlots.some(s=>s.typeCode===9),'Visible default ST rule must generate LIM');
-    }
-    if(mode==='mapper-default-control'||mode==='shipped-table'||mode==='arbitrary-field-control'){
-      assert.deepEqual(receipt.decisions.map(d=>d.kind),['REST','GUIDE','LINESTOP']);
-      const actual=new Set(receipt.native.targetSlots.map(s=>s.typeCode));
-      for(const code of [14,8,9])assert.ok(actual.has(code),'Missing independent expected native code '+code);
     }
   });
 }
