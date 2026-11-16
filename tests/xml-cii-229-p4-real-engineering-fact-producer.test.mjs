@@ -16,6 +16,7 @@ import {xmlCiiDryRunPreview} from '../tabs/xml-cii-2019-standalone/ui-adapted/xm
 import {projectXmlCiiOccurrences} from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-preview-facts-xml-source.js';
 import {createPreviewBasis} from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-preview-facts-basis.js';
 import {digestUtf8} from '../contracts/gc-pw-v1/contract.mjs';
+import {prepareXml229PrefinalRestraints} from '../tabs/xml-cii-2019-standalone/integration/xml229-prefinal-restraints.mjs';
 import {openXml229EngineeringFactModel,XML229_ENGINEERING_FIELDS}
  from '../tabs/xml-cii-2019-standalone/integration/xml229-preview-engineering-fact-producer.mjs';
 import {createGcPwPreviewWorkerFactPort}
@@ -275,4 +276,39 @@ test('root and served docs producer are byte-for-byte identical',async()=>{
  const p='tabs/xml-cii-2019-standalone/integration/xml229-preview-engineering-fact-producer.mjs';
  assert.deepEqual(await readFile(new URL('../'+p,import.meta.url)),
    await readFile(new URL('../docs/'+p,import.meta.url)));
+});
+
+test('actual Preview producer quarantines source ST/GT conflicts while independent Weight facts remain available',async()=>{
+ const branch='/ASIM-1836-8"-P8810021-31441C4-PP/B4';
+ const xml=XML.replace('</Branch>','<Node><NodeNumber>330</NodeNumber><NodeName>SL-SYNTH.1.1</NodeName><ComponentType>ANCI</ComponentType><Position>750 0 0</Position><Restraint><Type>+Y</Type><Gap>0</Gap><Stiffness>1000</Stiffness></Restraint></Node></Branch>');
+ const item=(NAME,MDSSUPPFUNC,MDSSUPPTYPE,CMPSUPTYPE,CMPSUPGAP)=>({type:'SUPPORT',attributes:{NAME,POS:{x:750,y:0,z:0},MDSSUPPFUNC,MDSSUPPTYPE,CMPSUPTYPE,CMPSUPGAP,NODETYPE:'14',NODEGAP:'0'}});
+ const stagedSource=JSON.stringify([{type:'BRANCH',name:branch,children:[
+  item('/SL-SYNTH.1.1','PIPE-REST','PIPE-REST','REST',''),
+  item('/SL-SYNTH.1.2','ST','ST501','LS-S2-3','GAP=35mm'),
+  item('/SL-SYNTH.1.3','GT','GT500','PG-S-3','GAP=10mm')]}]);
+ const cfg={...config,dtxrPositionOffset:{enabled:true,xOffset:0,yOffset:0,zOffset:0},resolverJsonTrace:{matchMode:'POS',coordinateTolerance:6}};
+ const args={xmlText:xml,stagedJsonText:stagedSource,config:cfg};
+ await assert.rejects(prepareXml229PrefinalRestraints(args),getCode('PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT'));
+ const review=await prepareXml229PrefinalRestraints({...args,purpose:'preview'});
+ assert.equal(review.restraintReview.status,'HOLD');
+ assert.equal(review.restraintReview.warnings.length,2);
+ assert.equal(review.proof.restraintAudit.warnings.length,2);
+ assert.equal(review.proof.engineeringRestraintAcceptance,'HOLD');
+ const carrier=[...review.document.getElementsByTagName('Node')].find(n=>n.getElementsByTagName('NodeNumber')[0].textContent==='330');
+ assert.deepEqual([...carrier.getElementsByTagName('Restraint')].map(n=>n.getElementsByTagName('Type')[0].textContent),['+Y']);
+ const basis=await createPreviewBasis({domainId:'xml-cii/2019',sources:[{sourceId:SOURCE_ID,mediaType:'application/xml',text:xml}],masters,selection,stagedSource,config:cfg,overrides:{},sha256:digestUtf8});
+ const original=projectXmlCiiOccurrences({xmlText:xml,sourceId:SOURCE_ID});
+ const preview=xmlCiiDryRunPreview(xml,structuredClone(cfg),stagedSource);
+ const opened=await openXml229EngineeringFactModel({basis,live:{sources:{[SOURCE_ID]:xml},masters,selection,stagedSource,config:cfg,overrides:{}},xmlText:xml,sourceId:SOURCE_ID,
+  previewResult:{...preview,sourceOccurrences:original,engineeringAcceptance:'NOT_ASSESSED',fullFactPopulationAccepted:false},
+  expectedOriginalCount:original.branchCount+original.nodeCount});
+ assert.equal(opened.workerResult.engineeringAcceptance,'HOLD');
+ assert.equal(opened.workerResult.fullFactPopulationAccepted,false);
+ assert.equal(opened.workerResult.restraintReview.warnings.length,2);
+ assert.equal(opened.model.info.engineeringReady,true,'independent physical facts remain available');
+ assert.equal(opened.physicalOccurrences.length,3);
+ assert.equal(opened.finalizedGeometry.prefinalRestraints.engineeringRestraintAcceptance,'HOLD');
+ // A duplicated approved override is invalid configuration, not a warning.
+ const bad={...cfg,xml229RestraintKindOverrides:[{memberName:'/SL-SYNTH.1.2'},{memberName:'/SL-SYNTH.1.2'}]};
+ await assert.rejects(prepareXml229PrefinalRestraints({...args,config:bad,purpose:'preview'}),getCode('PREFINAL_RESTRAINT_OVERRIDE_AMBIGUOUS'));
 });
