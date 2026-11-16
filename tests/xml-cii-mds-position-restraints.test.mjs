@@ -255,3 +255,39 @@ test('gapless ST501 remains independently conflicted, and cannot be approved as 
   assert.throws(()=>closeGovernedMdsPositionRestraintsXml(BM3_XML,input,config,
     {requireUnambiguous:true}),error=>error.code==='PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT');
 });
+
+const {prepareXml229PrefinalRestraints} = await import(
+ '../tabs/xml-cii-2019-standalone/integration/xml229-prefinal-restraints.mjs'
+);
+
+test('production BM3 pre-Final Preview quarantines ST501/GT500 without changing original REST',async()=>{
+ const preview=await prepareXml229PrefinalRestraints({
+   xmlText:BM3_XML,stagedJsonText:BM3_JSON,config:BM3_CONFIG,policy:'preview',
+ });
+ assert.equal(preview.restraintReview.schema,'XML229.PreviewRestraintReview.v1');
+ assert.equal(preview.restraintReview.status,'FOR_REVIEW');
+ assert.equal(preview.restraintReview.engineeringRestraintAcceptance,'HOLD');
+ assert.equal(preview.restraintReview.warnings.length,2);
+ assert.equal(preview.restraintReview.quarantinedXmlNodeCount,1);
+ assert.deepEqual(preview.restraintReview.warnings.map(w=>w.member.fields.NAME).sort(),
+  ['/SL-1840203.1.2','/SL-1840203.1.3']);
+ assert.deepEqual(preview.document.getElementsByTagName('Restraint').map(r=>
+  r.children.find(c=>c.nodeName==='Type')?.textContent),['+Y']);
+ assert.equal(preview.proof.restraintAudit.warnings.length,2);
+ await assert.rejects(prepareXml229PrefinalRestraints({
+  xmlText:BM3_XML,stagedJsonText:BM3_JSON,config:BM3_CONFIG,
+ }),{code:'PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT'});
+});
+
+test('quarantined unmatched ATTA cannot get an invented fallback restraint',async()=>{
+ const xml=BM3_XML.replace('<ComponentType>ANCI</ComponentType>','<ComponentType>ATTA</ComponentType>')
+  .replace(/<Restraint>.*?<\/Restraint>/,'');
+ const members=[{type:'BRANCH',name:BM3_LINE+'/B1',children:[BM3_MEMBERS[2]]}];
+ const preview=await prepareXml229PrefinalRestraints({
+  xmlText:xml,stagedJsonText:JSON.stringify(members),config:BM3_CONFIG,
+  policy:'preview',
+ });
+ assert.equal(preview.restraintReview.status,'FOR_REVIEW');
+ assert.equal(preview.document.getElementsByTagName('Restraint').length,0);
+ assert.equal(preview.stats.attaDefaultRestRestraintsAdded,0);
+});
