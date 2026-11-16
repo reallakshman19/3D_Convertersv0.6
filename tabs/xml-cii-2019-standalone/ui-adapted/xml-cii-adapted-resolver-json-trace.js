@@ -304,6 +304,36 @@ function renderResolverIndex(parent, state, stateRef, render, scopeState) {
   metrics.append(metric('XML nodes', stat(result, 'xmlNodeCount')), metric('Node keys', stat(result, 'nodeKeyCount')), metric('PS keys', stat(result, 'psKeyCount')), metric('POS keys', stat(result, 'posKeyCount')));
   section.appendChild(metrics);
 
+  const review = result?.restraintReview || null;
+  if (review) {
+    const reviewSection = createElement('section', '', 'xml-cii-resolver-panel');
+    reviewSection.appendChild(createElement('h4',
+      'Engineering restraint source review — ' + (review.status || 'NOT_ASSESSED')));
+    reviewSection.appendChild(createElement('p',
+      review.status === 'HOLD'
+        ? 'Preview continues. Original XML restraints are preserved; disputed LIM/GUI are not automatically approved for Final.'
+        : review.status === 'REVIEW_BLOCKED'
+          ? 'Review could not run; this is not an engineering PASS: ' + (review.code || '') +
+            ' — ' + (review.error || '')
+          : 'No independently qualified engineering PASS is asserted by this source review.',
+      'xml-cii-phase-help'));
+    const warnings = Array.isArray(review.warnings) ? review.warnings : [];
+    if (warnings.length) {
+      const rows = warnings.map((item) => ({
+        nodeKey: item.nodeNumber || '',
+        Member: item.member?.name || item.member?.fields?.NAME || item.members?.join(' / ') || '',
+        'NODETYPE kind': item.sourceKind || '',
+        'Proposed kind': item.candidateKind || item.kind || '',
+        'Gap (source)': item.member?.fields?.CMPSUPGAP || (item.gaps || []).join(' / '),
+        Code: item.code || '',
+      }));
+      reviewSection.appendChild(table(
+        ['Node','Member','NODETYPE kind','Proposed kind','Gap (source)','Code'], rows,
+        'No local restraint conflicts found.'));
+    }
+    section.appendChild(reviewSection);
+  }
+
   const diagnostics = result?.diagnostics || [];
   if (diagnostics.length) {
     const diagSection = createElement('div', '', 'xml-cii-resolver-diagnostics-container');
