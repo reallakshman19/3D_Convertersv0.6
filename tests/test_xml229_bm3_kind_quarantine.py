@@ -54,7 +54,7 @@ class BM3ClassificationTests(unittest.TestCase):
         restraints=[(r.findtext('Type'),r.findtext('Gap')) for r in node.findall('Restraint')]
         self.assertIn(('LIM','35.0'),restraints)
         self.assertIn(('GUI','10.0'),restraints)
-        self.assertIn(('+Y','0'),restraints)
+        self.assertIn(('+Y','0.0'),restraints)
 
     def test_invalid_approval_or_drift_is_rejected(self):
         cfg={**CONFIG,'xml229RestraintKindOverrides':[receipt(ST,'LINESTOP'),receipt(GT,'GUIDE')]}
