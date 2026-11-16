@@ -15,6 +15,9 @@
  */
 
 import { DEFAULT_KIND_MAP, DEFAULT_RULES, resolveKindPure } from '../support/SupportKindResolver.js';
+import { matchAttRvmSupportTable } from './xml-cii2019-core/support-kind-precedence.js';
+import { migrateSupportMappingConfig } from './xml-cii2019-core/support-mapping-config.js';
+import { restraintTypeToCaesarCode } from './xml-cii2019-core/restraint-type-codes.js';
 
 const TYPE_ALIASES = Object.freeze({
   FBLI: 'FLAN',
@@ -147,27 +150,61 @@ function parseTextBlocks(content) {
 // DTXR is intentionally excluded by default: it can contain support text such as GUIDE/REST.
 const BORE_FIELDS = ['HBOR', 'TBOR', 'ABORE', 'LBORE', 'BORE', 'NBORE', 'DBOR'];
 
-// ATT/RVM export policy only: corroborating MDS member codes plus an explicit
-// non-negative millimetre clearance supersede the copied generic REST code.
-// Retain the original ATT NODETYPE. Do not guess a gap or change unrelated codes.
-export function normalizeAttRvmMdsMember(attrs = {}) {
-  const upper = value => String(value ?? '').trim().toUpperCase();
-  const fn = upper(attrs.MDSSUPPFUNC);
-  const mds = upper(attrs.MDSSUPPTYPE);
-  const catalogue = upper(attrs.CMPSUPTYPE);
-  const rawType = upper(attrs.NODETYPE);
-  const isGuide = fn === 'GT' && /^GT\d+$/.test(mds) && /^PG-[A-Z0-9-]+$/.test(catalogue);
-  const isStop = fn === 'ST' && /^ST\d+$/.test(mds) && /^LS-[A-Z0-9-]+$/.test(catalogue);
-  if (!isGuide && !isStop) return '';
-  const kind = isGuide ? 'GUIDE' : 'LINESTOP';
-  const target = isGuide ? '8' : '9';
-  if (rawType === target) return kind;
-  if (rawType !== '14' ||
-      !/^(?:GAP\s*=\s*)?\+?(?:\d+(?:\.\d+)?|\.\d+)\s*MM$/i.test(String(attrs.CMPSUPGAP ?? '').trim())) return '';
-  if (attrs.SOURCE_NODETYPE != null && upper(attrs.SOURCE_NODETYPE) !== '14') return '';
-  attrs.SOURCE_NODETYPE = attrs.NODETYPE;
-  attrs.NODETYPE = target;
-  attrs.NODETYPE_CLASSIFICATION_SOURCE = 'ATT_RVM_MDS_MEMBER';
+// Export-only rule/profile projection. Raw source values remain available;
+// the shared XML->CII NODETYPE owner rule is not changed.
+export function normalizeAttRvmMdsMember(attrs = {}, config = {}, source = 'ATT') {
+  const text = value => String(value ?? '').trim();
+  const mapping = migrateSupportMappingConfig(config);
+  if (!mapping.useJsonForRestraints) return '';
+  const evidence = {...attrs};
+  if (Object.hasOwn(attrs,'SOURCE_NODETYPE')) evidence.NODETYPE = attrs.SOURCE_NODETYPE;
+  if (Object.hasOwn(attrs,'SOURCE_NODEGAP')) evidence.NODEGAP = attrs.SOURCE_NODEGAP;
+  let decision;
+  const kind = matchAttRvmSupportTable(evidence,{...config,supportMapping:mapping},source,d=>{decision=d;});
+  if (!kind) { attrs.SUPPORT_MAPPING_STATUS = 'FOR_REVIEW_NO_RULE'; return ''; }
+  const profile = mapping.kindProfiles[kind] || {};
+  const types = profile.xmlTypes || [];
+  const codes = types.map(restraintTypeToCaesarCode);
+  if (!codes.length || codes.some(code=>code===null)) {
+    attrs.SUPPORT_MAPPING_STATUS = 'FOR_REVIEW_INVALID_PROFILE'; return '';
+  }
+  const parseGap = value => {
+    const raw = text(value);
+    if (!/^(?:GAP\s*=\s*)?[-+]?(?:\d+(?:\.\d+)?|\.\d+)\s*(?:MM)?$/i.test(raw)) return null;
+    const n=Number(raw.replace(/^GAP\s*=\s*/i,'').replace(/MM$/i,'').trim());
+    return Number.isFinite(n) ? n : null;
+  };
+  const gaps = ['CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'].filter(k=>text(evidence[k])!=='');
+  const sourceNodeGap = text(evidence.NODEGAP);
+  if (gaps.length && sourceNodeGap && parseGap(sourceNodeGap)!==0) gaps.push('NODEGAP');
+  else if (!gaps.length && sourceNodeGap && parseGap(sourceNodeGap)!==0) gaps.push('NODEGAP');
+  const values = gaps.map(k=>parseGap(evidence[k]));
+  if (values.some(v=>v===null) || values.some(v=>v!==values[0])) {
+    attrs.SUPPORT_MAPPING_STATUS='FOR_REVIEW_GAP_CONFLICT';return '';
+  }
+  const gap = values.length ? values[0] : parseGap(profile.gap);
+  if (gap===null) {attrs.SUPPORT_MAPPING_STATUS='FOR_REVIEW_INVALID_DEFAULT_GAP';return '';}
+  if (!Object.hasOwn(attrs,'SOURCE_NODETYPE') && Object.hasOwn(attrs,'NODETYPE'))
+    attrs.SOURCE_NODETYPE=attrs.NODETYPE;
+  if (!Object.hasOwn(attrs,'SOURCE_NODEGAP') && Object.hasOwn(attrs,'NODEGAP'))
+    attrs.SOURCE_NODEGAP=attrs.NODEGAP;
+  // Composite profiles cannot be represented by one source NODETYPE.
+  // Preserve all configured codes and allow downstream profile expansion.
+  if (codes.length===1) attrs.NODETYPE=String(codes[0]);
+  else delete attrs.NODETYPE;
+  attrs.NODETYPE_CODES=codes.map(String);
+  attrs.NODETYPE_CLASSIFICATION_SOURCE='STEP7_SUPPORT_MAPPING';
+  attrs.SUPPORT_MAPPING_RULE_ID=decision.rule.id;
+  attrs.SUPPORT_MAPPING_RULE_PRIORITY=String(decision.rule.priority);
+  attrs.SUPPORT_MAPPING_RULE_FIELD=decision.rule.matchEvidence.sourceField;
+  attrs.SUPPORT_MAPPING_STATUS='MAPPED';
+  attrs.SUPPORT_KIND=attrs.SUPPORT_TYPE=attrs.SUPPORT_MAPPER_KIND=kind;
+  // Retain original catalogue gaps, including explicit zero; materialize the
+  // selected profile default only when no independent clearance is supplied.
+  if (!gaps.length) attrs.NODEGAP=String(gap);
+  attrs.SUPPORT_EFFECTIVE_GAP=String(gap);
+  attrs.SUPPORT_GAP_SOURCE=gaps.length ? gaps[0] : 'STEP7_KIND_PROFILE';
+  attrs.SUPPORT_MAPPING_PROFILE={...profile,xmlTypes:[...types]};
   return kind;
 }
 
@@ -1105,9 +1142,9 @@ export function parseRmssStructuralMembers(content, options = {}) {
     const label = ownerTail ? `${ownerTail}/${memberName}` : memberName;
 
     const attrs = block?.attributes || {};
-    const memberKind = options.normalizeAttRvmMdsMembers === true && canonicalComponentType(rawType) === 'SUPPORT'
-      ? normalizeAttRvmMdsMember({ ...attrs }) : '';
-    const kind = memberKind || resolveKindPure(attrs, {
+    const exportMapping = options.normalizeAttRvmMdsMembers === true && canonicalComponentType(rawType) === 'SUPPORT';
+    const memberKind = exportMapping ? normalizeAttRvmMdsMember({ ...attrs },options.attRvmSupportConfig,'ATT') : '';
+    const kind = exportMapping ? memberKind : resolveKindPure(attrs, {
       userRules: [],
       defaultRules: DEFAULT_RULES,
       kindMap: DEFAULT_KIND_MAP,
