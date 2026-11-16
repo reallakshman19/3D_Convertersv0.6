@@ -134,7 +134,7 @@ export function renderUnifiedSupportMappingTable(container, config) {
             <th style="color:#fff;">Dir Y</th>
             <th style="color:#fff;">Dir Z</th>
             <th style="color:#fff;">Stiffness</th>
-            <th style="color:#fff;">Gap</th>
+            <th style="color:#fff;" title="Step 7 support-kind fallback gap (mm). An explicit source CMPSUPGAP/NODEGAP, including zero, wins.">Gap</th>
             <th style="color:#fff;">Friction</th>
             <th style="color:#fff;">Fixed Fric.</th>
             <th style="color:#fff;">Tag Mode</th>
@@ -154,6 +154,11 @@ export function renderUnifiedSupportMappingTable(container, config) {
       <code>pipe-normal</code> is for guides;
       <code>from-staged</code> reads staged JSON direction attributes;
       <code>from-xml</code> preserves XML restraint direction cosines.
+      <strong>Gap (mm):</strong> Step 7 is the saved fallback per support kind
+      (REST, GUIDE, LINESTOP, etc.). Every row of the same kind shares that Gap.
+      A source CMPSUPGAP/NODEGAP, including explicit 0, always takes precedence.
+      With neither source nor configured kind gap, use 0; the global defaultGap
+      is not a substitute for source evidence.
       Built-in rows can be disabled; add user rows for project-specific rules.
     </div>
   `;
@@ -215,8 +220,14 @@ export function bindUnifiedSupportMappingTable(container, config, callbacks = {}
       const rowId = input.getAttribute('data-sm-row');
       const field = input.getAttribute('data-sm-field');
       const value = input.type === 'checkbox' ? input.checked : input.value;
-      applySupportMappingRowPatch(config, rowId, { [field]: value });
-      save(false);
+      try {
+        applySupportMappingRowPatch(config, rowId, { [field]: value });
+        input.setCustomValidity?.('');
+        save(false);
+      } catch (error) {
+        input.setCustomValidity?.(error?.message || 'Invalid support mapper value');
+        input.reportValidity?.();
+      }
     };
 
     input.addEventListener('change', apply);

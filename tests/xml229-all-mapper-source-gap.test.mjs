@@ -10,12 +10,12 @@ import {nativeTestPython} from './helpers/native-python.mjs';
 installWeightBasisXmlDom(globalThis);
 const kinds=['REST','GUIDE','LINESTOP','LIMIT','ANCHOR','SPRING'];
 const config={defaultGap:17,supportMapping:{version:2,kindProfiles:Object.fromEntries(kinds.map(k=>[k,{gap:23}]))}};
-const samples=[[{},0], [{CMPSUPGAP:'25MM GAP'},25],[{CMPSUPGAP:0,CMPSUPGAP_POS:'0mm'},0],
+const samples=[[{},23], [{CMPSUPGAP:'25MM GAP'},25],[{CMPSUPGAP:0,CMPSUPGAP_POS:'0mm'},0],
   [{CMPSUPGAP_POS:'5mm'},5],[{CMPSUPGAP_PS:'10MM GAP'},10],[{NODEGAP:'6.5'},6.5],
   [{CMPSUPGAP:'10mm',NODEGAP:0},10],[{NODEGAP:0},0]];
-test('all mapper profiles consume own JSON gap or zero, even with stale nonzero defaults',()=>{
+test('all mapper profiles use explicit source gap or saved Step 7 Gap, never global defaultGap',()=>{
  for(const kind of kinds){
-  assert.equal(migrate(config).kindProfiles[kind].gap,'0');
+  assert.equal(migrate(config).kindProfiles[kind].gap,'23');
   for(const [attrs,want] of samples)for(const engine of [root,active,served]){
    const doc=new DOMParser().parseFromString('<Node><CMPSUPGAP>99</CMPSUPGAP></Node>','application/xml');
    const node=doc.documentElement;
@@ -27,6 +27,14 @@ test('all mapper profiles consume own JSON gap or zero, even with stale nonzero 
    assert.ok(restraints.every(r=>Number(r.getElementsByTagName('Gap')[0].textContent)===want));
    assert.ok(restraints.every(r=>r.getElementsByTagName('CMPSUPGAP').length===Number(Object.keys(attrs).length>0)));
   }
+ }
+});
+test('without an authored Step 7 profile, absent source gap remains zero regardless of global defaultGap', () => {
+ for(const kind of kinds){
+  const cfg={defaultGap:17};
+  assert.equal(migrate(cfg).kindProfiles[kind].gap, '0');
+  const entry=root.restraintEntriesFromSupportKind(kind, {}, null, cfg)[0];
+  assert.equal(Number(entry.gap),0,kind);
  }
 });
 test('invalid or conflicting source aliases fail closed, explicit zero is not a missing value',()=>{

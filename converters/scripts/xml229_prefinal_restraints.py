@@ -304,7 +304,7 @@ def profile_for(kind, config):
                  'LINESTOP': ('LIM', 'pipe-axis')}[kind]
     p = dict(xmlTypes=(config.get('supportKindToXmlType') or {}).get(kind) or [typ],
              directionMode=mode, direction={'x': 0, 'y': 1, 'z': 0} if kind == 'REST' else None,
-             stiffness='default', gap=text(config.get('defaultGap', '0')),
+             stiffness='default', gap='0',
              frictionMode='default' if kind == 'REST' else 'sentinel', fixedFriction='')
     mapping = config.get('supportMapping') or {}
     if float(mapping.get('version') or 0) >= 2:
@@ -358,8 +358,16 @@ def append_profile(node, kind, attrs, config, allowed=None):
     ns = node.tag.rsplit('}', 1)[0] + '}' if '}' in node.tag else ''
     d = direction(p, attrs, node)
     raw = source_gap(attrs)
-    require_gap = numeric(raw) if raw else 0
-    if require_gap is None or not math.isfinite(require_gap):
+    # Source-authored CMPSUPGAP/NODEGAP, including zero, wins. The Step 7
+    # profile is the only configurable fallback; global defaultGap is not.
+    if raw:
+        require_gap = numeric(raw)
+    else:
+        try:
+            require_gap = float(text(p.get('gap')) or '0')
+        except (TypeError, ValueError):
+            raise ValueError('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID') from None
+    if require_gap is None or not math.isfinite(require_gap) or (not raw and require_gap < 0):
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
     gap = str(require_gap)
     original_type = node_type_mutation(attrs, config)

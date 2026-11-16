@@ -18,6 +18,16 @@ on:
       - 'tests/test_xml229_bm3_kind_quarantine.py'
       - 'tests/xml-cii-mds-position-restraints.test.mjs'
       - 'tests/xml-cii-staged-json-trace-sidecar.test.mjs'
+      - 'tests/xml229-step7-gap-authority.test.mjs'
+      - 'tests/xml229-all-mapper-source-gap.test.mjs'
+      - 'tests/xml229-json-restraint-body-transfer.test.mjs'
+      - 'tests/xml229-json-restraint-native-check.py'
+      - 'converters/xml-cii2019-core/support-mapping-config.js'
+      - 'docs/converters/xml-cii2019-core/support-mapping-config.js'
+      - 'converters/xml-cii2019-core/support-mapping-legacy.js'
+      - 'docs/converters/xml-cii2019-core/support-mapping-legacy.js'
+      - 'tabs/model-converters/converters/xmltocii2019_helper/support-mapping-table.js'
+      - 'docs/tabs/model-converters/converters/xmltocii2019_helper/support-mapping-table.js'
       - 'tabs/xml-cii-2019-standalone/xml-cii-staged-json-trace-sidecar.js'
       - 'docs/tabs/xml-cii-2019-standalone/xml-cii-staged-json-trace-sidecar.js'
       - 'converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js'
@@ -53,6 +63,10 @@ jobs:
           node --test tests/xml-cii-support-kind-owner-precedence.test.mjs
       - name: Validate original JSON restraint body transfer and native forgery challenges
         run: node --test tests/xml229-json-restraint-body-transfer.test.mjs
+      - name: Validate Step 7 Gap persistence, source precedence and JS/native parity
+        run: |
+          node --test tests/xml229-step7-gap-authority.test.mjs
+          node --test tests/xml229-all-mapper-source-gap.test.mjs
       - name: Verify JSON trace CSV sidecar roundtrip
         run: node --test tests/xml-cii-staged-json-trace-sidecar.test.mjs
       - name: Run BM3 restraint source conflict and quarantine tests
@@ -72,6 +86,9 @@ jobs:
           diff -u converters/scripts/xml229_prefinal_restraints.py docs/converters/scripts/xml229_prefinal_restraints.py
           diff -u converters/scripts/xml229_native_final_mass_binding.py docs/converters/scripts/xml229_native_final_mass_binding.py
           diff -u converters/scripts/xml_to_cii2019_runtime_custody.py docs/converters/scripts/xml_to_cii2019_runtime_custody.py
+          diff -u converters/xml-cii2019-core/support-mapping-config.js docs/converters/xml-cii2019-core/support-mapping-config.js
+          diff -u converters/xml-cii2019-core/support-mapping-legacy.js docs/converters/xml-cii2019-core/support-mapping-legacy.js
+          diff -u tabs/model-converters/converters/xmltocii2019_helper/support-mapping-table.js docs/tabs/model-converters/converters/xmltocii2019_helper/support-mapping-table.js
           diff -u converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js docs/converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js
           diff -u converters/xml-cii2019-core/support-kind-precedence.js docs/converters/xml-cii2019-core/support-kind-precedence.js
           diff -u tabs/xml-cii-2019-standalone/xml-cii-mds-restraint-closure.js docs/tabs/xml-cii-2019-standalone/xml-cii-mds-restraint-closure.js

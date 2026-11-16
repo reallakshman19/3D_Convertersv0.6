@@ -512,7 +512,9 @@ export function restraintEntriesFromSupportKind(kind, attrs = {}, nodeElement = 
   const values = normalizeXmlTypes(profile.xmlTypes || config.supportKindToXmlType?.[upperKind] || []);
   const direction = resolveSupportDirectionCosines({ profile, attrs, nodeElement });
   const sourceGap = sourceSupportGap(attrs);
-  const gap = sourceGap.gap;
+  // Explicit source gap (including zero) wins. In its absence use the
+  // saved Step 7 kind profile, never a free-standing global defaultGap.
+  const gap = sourceGap.explicit ? sourceGap.gap : String(profile.gap ?? '0');
   return values.map(normalizeXmlType).filter(Boolean).map((type) => createRestraintEntry({
     type,
     stiffness: profile.stiffness && profile.stiffness !== 'default' ? profile.stiffness : config.defaultStiffness,
