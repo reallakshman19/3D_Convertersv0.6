@@ -1,5 +1,6 @@
 import { runStandaloneRegexTester } from '../xml-cii-regex-tester.js';
 import { runStandaloneResolverJsonTrace } from '../xml-cii-resolver-json-trace.js';
+import { closeGovernedMdsPositionRestraintsXml } from '../xml-cii-mds-restraint-closure.js';
 import { runStandaloneManualElementSideload } from '../xml-cii-manual-element-sideload.js';
 import { buildStandalonePreviewDiagnosticsAudit } from '../xml-cii-preview-diagnostics-audit.js';
 import { runStandaloneWeightMatch } from '../xml-cii-weight-match.js';
@@ -244,7 +245,30 @@ export async function runResolverJsonTraceFromUi(container, stateRef, render, sa
   if (tx) stateRef.current = updateResolverJsonTraceConfig(stateRef.current, tx.value);
   const sourceText = await sourceTextFromState(stateRef.current);
   const stagedJsonText = await stagedJsonTextFromState(stateRef.current);
-  const result = runStandaloneResolverJsonTrace({ ...stateRef.current, sourceText, stagedJsonText, jsonConfig: stateRef.current.resolverJsonTraceConfig });
+  const rawResult = runStandaloneResolverJsonTrace({ ...stateRef.current, sourceText, stagedJsonText, jsonConfig: stateRef.current.resolverJsonTraceConfig });
+  // Review-only quarantine: preserve original restraints and keep successful
+  // resolver indexing available even when a single source support conflicts.
+  // The native pre-Final stage remains strict and cannot consume this flag.
+  let restraintReview = { status: 'NOT_ASSESSED', warnings: [] };
+  if (sourceText.trim() && stagedJsonText.trim()) {
+    try {
+      const parsedConfig = JSON.parse(stateRef.current.supportConfigJson || '{}');
+      const cfg = parsedConfig && typeof parsedConfig === 'object' && !Array.isArray(parsedConfig)
+        ? parsedConfig : {};
+      const resolverCfg = stateRef.current.resolverJsonTraceConfig || {};
+      const effective = { ...cfg, resolverJsonTrace: { ...(cfg.resolverJsonTrace || {}), ...resolverCfg },
+        dtxrPositionOffset: resolverCfg.dtxrPositionOffset || cfg.dtxrPositionOffset };
+      const audit = closeGovernedMdsPositionRestraintsXml(sourceText, stagedJsonText, effective,
+        { requireUnambiguous: true, conflictPolicy: 'quarantine' });
+      restraintReview = { status: audit.engineeringRestraintAcceptance || 'NOT_ASSESSED',
+        warnings: audit.warnings || [], diagnosticCount: audit.diagnostics?.length || 0 };
+    } catch (error) {
+      restraintReview = { status: 'REVIEW_BLOCKED', warnings: [],
+        code: error?.code || 'PREFINAL_RESTRAINT_REVIEW_FAILED',
+        error: String(error?.message || error) };
+    }
+  }
+  const result = { ...rawResult, restraintReview };
   const benchmark = stateRef.current.resolverJsonTraceTableResult
     ? compareTraceResultsByComponentRef(result, stateRef.current.resolverJsonTraceTableResult)
     : stateRef.current.jsonTraceTableBenchmark;
@@ -256,7 +280,7 @@ export async function runResolverJsonTraceFromUi(container, stateRef, render, sa
       jsonTraceTableBenchmark: benchmark,
       resolverJsonTraceRunning: false,
       resolverJsonTraceExportStatus: '',
-      resolverJsonTraceWriteBackStatus: `Resolver index built: ${result.resolvedFacts.length} facts processed.`
+      resolverJsonTraceWriteBackStatus: `Resolver index built: ${result.resolvedFacts.length} facts processed. Restraint review: ${restraintReview.status}, ${restraintReview.warnings.length} quarantined conflict(s).`
     });
   render();
 }
