@@ -30,10 +30,13 @@ const rows=doc=>[...doc.getElementsByTagName('Node')].map(n=>({id:field(n,'NodeN
 const stage=(xmlText=XML,source=staged(),cfg=config)=>prepareXml229PrefinalRestraints({xmlText,
  stagedJsonText:JSON.stringify(source),config:structuredClone(cfg)});
 
+// Source-qualified REST uses its explicit REST fallback profile (Node 30); an
+// unmatched ATTA (Node 60) has NO source gap owner, so its generated +Y must
+// retain a conservative zero gap even when config.defaultGap is nonzero.
 test('original JSON REST/GUIDE/LINESTOP and numeric gaps precede fallback; zero friction survives',async()=>{
  const r=await stage();
  assert.deepEqual(rows(r.document).slice(2).map(r=>r.restraints),[
- [['+Y','7','0']],[['GUI','6','-1.010100']],[['LIM','8','-1.010100']],[['+Y','7','0']],
+ [['+Y','7','0']],[['GUI','6','-1.010100']],[['LIM','8','-1.010100']],[['+Y','0','0']],
  ]);
  assert.equal(r.proof.originalJsonSha256,await digestUtf8(JSON.stringify(staged())));
 });
