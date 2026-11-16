@@ -862,7 +862,7 @@ def _apply_staged_position_restraints(node: ET.Element, namespace: str,
     expected_node = ET.Element(_q(namespace, "Node"))
     for kind in ("REST", "GUIDE", "LINESTOP"):
         if kind in matched:
-            append_profile(expected_node, kind, matched[kind], support_config)
+            append_profile(expected_node, kind, matched[kind], support_config, selected_source=True)
     expected = [r for r in expected_node if _local_name(r.tag) == "Restraint"]
     valid_types = {present_type(_child_text(rest, namespace, "Type")) for rest in expected}
     # A generated DTXR annotation is replaceable; an independently authored
