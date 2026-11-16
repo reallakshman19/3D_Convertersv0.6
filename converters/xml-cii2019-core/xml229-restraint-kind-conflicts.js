@@ -67,10 +67,12 @@ export function approvedXml229MdsKindResolution(attrs = {}, config = {}, conflic
 }
 
 export function isQuarantinableXml229RestraintError(error) {
+  // A bad Step 7/8 configuration must NEVER be hidden as a local warning.
+  // Only the exact source-bound ST/GT contradiction may quarantine this code.
+  if (text(error?.code) === 'PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+    return !!(error?.sourceName && error?.candidateKind && error?.fields?.NODETYPE);
   return new Set([
-    'PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT',
     'PREFINAL_RESTRAINT_TYPE_AMBIGUOUS',
-    'PREFINAL_RESTRAINT_KIND_AMBIGUOUS',
     'PREFINAL_RESTRAINT_GAP_AMBIGUOUS',
     'PREFINAL_RESTRAINT_GAP_INVALID',
     'PREFINAL_RESTRAINT_MATCH_AMBIGUOUS',
