@@ -160,7 +160,12 @@ export function normalizeAttRvmMdsMember(attrs = {}, config = {}, source = 'ATT'
   if (Object.hasOwn(attrs,'SOURCE_NODETYPE')) evidence.NODETYPE = attrs.SOURCE_NODETYPE;
   if (Object.hasOwn(attrs,'SOURCE_NODEGAP')) evidence.NODEGAP = attrs.SOURCE_NODEGAP;
   let decision;
-  const kind = matchAttRvmSupportTable(evidence,{...config,supportMapping:mapping},source,d=>{decision=d;});
+  let kind;
+  try {kind=matchAttRvmSupportTable(evidence,{...config,supportMapping:mapping},source,d=>{decision=d;});}
+  catch(error) {
+    if(error.code!=='PREFINAL_RESTRAINT_KIND_AMBIGUOUS') throw error;
+    attrs.SUPPORT_MAPPING_STATUS='FOR_REVIEW_RULE_TIE';return '';
+  }
   if (!kind) { attrs.SUPPORT_MAPPING_STATUS = 'FOR_REVIEW_NO_RULE'; return ''; }
   const profile = mapping.kindProfiles[kind] || {};
   const types = profile.xmlTypes || [];
@@ -170,24 +175,22 @@ export function normalizeAttRvmMdsMember(attrs = {}, config = {}, source = 'ATT'
   }
   const parseGap = value => {
     const raw = text(value);
-    if (!/^(?:GAP\s*=\s*)?[-+]?(?:\d+(?:\.\d+)?|\.\d+)\s*(?:MM)?$/i.test(raw)) return null;
-    const n=Number(raw.replace(/^GAP\s*=\s*/i,'').replace(/MM$/i,'').trim());
+    const match=raw.match(/^(?:GAP\s*=\s*)?([-+]?(?:\d+(?:\.\d+)?|\.\d+))\s*(?:MM)?(?:\s+GAP)?$/i);
+    if (!match) return null;
+    const n=Number(match[1]);
     return Number.isFinite(n) ? n : null;
   };
   const gaps = ['CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'].filter(k=>text(evidence[k])!=='');
   const sourceNodeGap = text(evidence.NODEGAP);
-  if (gaps.length && sourceNodeGap && parseGap(sourceNodeGap)!==0) gaps.push('NODEGAP');
-  else if (!gaps.length && sourceNodeGap && parseGap(sourceNodeGap)!==0) gaps.push('NODEGAP');
+  if (sourceNodeGap && parseGap(sourceNodeGap)!==0) gaps.push('NODEGAP');
   const values = gaps.map(k=>parseGap(evidence[k]));
   if (values.some(v=>v===null) || values.some(v=>v!==values[0])) {
     attrs.SUPPORT_MAPPING_STATUS='FOR_REVIEW_GAP_CONFLICT';return '';
   }
   const gap = values.length ? values[0] : parseGap(profile.gap);
   if (gap===null) {attrs.SUPPORT_MAPPING_STATUS='FOR_REVIEW_INVALID_DEFAULT_GAP';return '';}
-  if (!Object.hasOwn(attrs,'SOURCE_NODETYPE') && Object.hasOwn(attrs,'NODETYPE'))
-    attrs.SOURCE_NODETYPE=attrs.NODETYPE;
-  if (!Object.hasOwn(attrs,'SOURCE_NODEGAP') && Object.hasOwn(attrs,'NODEGAP'))
-    attrs.SOURCE_NODEGAP=attrs.NODEGAP;
+  if (!Object.hasOwn(attrs,'SOURCE_NODETYPE')) attrs.SOURCE_NODETYPE=attrs.NODETYPE ?? null;
+  if (!Object.hasOwn(attrs,'SOURCE_NODEGAP')) attrs.SOURCE_NODEGAP=attrs.NODEGAP ?? null;
   // Composite profiles cannot be represented by one source NODETYPE.
   // Preserve all configured codes and allow downstream profile expansion.
   if (codes.length===1) attrs.NODETYPE=String(codes[0]);
