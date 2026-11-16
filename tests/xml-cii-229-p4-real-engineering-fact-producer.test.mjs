@@ -289,8 +289,9 @@ test('actual Preview producer quarantines source ST/GT conflicts while independe
  const cfg={...config,dtxrPositionOffset:{enabled:true,xOffset:0,yOffset:0,zOffset:0},resolverJsonTrace:{matchMode:'POS',coordinateTolerance:6}};
  const args={xmlText:xml,stagedJsonText:stagedSource,config:cfg};
  await assert.rejects(prepareXml229PrefinalRestraints(args),getCode('PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT'));
- const review=await prepareXml229PrefinalRestraints({...args,purpose:'preview'});
- assert.equal(review.restraintReview.status,'HOLD');
+ const review=await prepareXml229PrefinalRestraints({...args,policy:'preview'});
+ assert.equal(review.restraintReview.status,'FOR_REVIEW');
+ assert.equal(review.restraintReview.engineeringRestraintAcceptance,'HOLD');
  assert.equal(review.restraintReview.warnings.length,2);
  assert.equal(review.proof.restraintAudit.warnings.length,2);
  assert.equal(review.proof.engineeringRestraintAcceptance,'HOLD');
@@ -302,13 +303,14 @@ test('actual Preview producer quarantines source ST/GT conflicts while independe
  const opened=await openXml229EngineeringFactModel({basis,live:{sources:{[SOURCE_ID]:xml},masters,selection,stagedSource,config:cfg,overrides:{}},xmlText:xml,sourceId:SOURCE_ID,
   previewResult:{...preview,sourceOccurrences:original,engineeringAcceptance:'NOT_ASSESSED',fullFactPopulationAccepted:false},
   expectedOriginalCount:original.branchCount+original.nodeCount});
- assert.equal(opened.workerResult.engineeringAcceptance,'HOLD');
- assert.equal(opened.workerResult.fullFactPopulationAccepted,false);
+ assert.equal(opened.workerResult.engineeringAcceptance,'VERIFIED');
+ assert.equal(opened.workerResult.engineeringRestraintAcceptance,'HOLD');
+ assert.equal(opened.workerResult.fullFactPopulationAccepted,true);
  assert.equal(opened.workerResult.restraintReview.warnings.length,2);
  assert.equal(opened.model.info.engineeringReady,true,'independent physical facts remain available');
  assert.equal(opened.physicalOccurrences.length,3);
  assert.equal(opened.finalizedGeometry.prefinalRestraints.engineeringRestraintAcceptance,'HOLD');
  // A duplicated approved override is invalid configuration, not a warning.
  const bad={...cfg,xml229RestraintKindOverrides:[{memberName:'/SL-SYNTH.1.2'},{memberName:'/SL-SYNTH.1.2'}]};
- await assert.rejects(prepareXml229PrefinalRestraints({...args,config:bad,purpose:'preview'}),getCode('PREFINAL_RESTRAINT_OVERRIDE_AMBIGUOUS'));
+ await assert.rejects(prepareXml229PrefinalRestraints({...args,config:bad,policy:'preview'}),getCode('PREFINAL_RESTRAINT_OVERRIDE_AMBIGUOUS'));
 });
