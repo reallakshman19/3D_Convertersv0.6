@@ -6,6 +6,8 @@ The caller retains the whole-XML comparison after replaying this bounded stage.
 from xml229_support_type_mapper import (owner_rule_kind, node_type_user_row_conflict, mapped_support_kind, configured_support_rule,
                                          configured_mapper_semantic_conflict, described_kinds, staged_field_kind_decision,
                                          mapped_code_precedence_enabled, mapped_code_precedence_applies)
+from xml229_restraint_precedence import (restraint_precedence, node_type_uses_mapper, json_node_type_attrs,
+                                         select_restraint_gap, select_restraint_scalar)
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -132,7 +134,7 @@ def preferred_kind(attrs, config, conflict=None):
     preferred = staged_field_kind_decision(attrs,config,raw_kind)
     if conflict:
         catalogue = any(text(attrs.get(k)) for k in ('CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'))
-        if preferred != conflict['candidateKind'] or (not catalogue and
+        if preferred != conflict['candidateKind'] or (not restraint_precedence(config) and not catalogue and
             not (field_precedence(config,'gap') and saved_profile_gap(config,preferred))):
             return ''
     return preferred
@@ -141,10 +143,12 @@ def preferred_kind(attrs, config, conflict=None):
 def effective_node_type(attrs, config):
     conflict=mds_kind_conflict(attrs,config)
     kind=mds_kind_approval(attrs,config,conflict) or preferred_kind(attrs,config,conflict)
-    return {'REST':'+Y','GUIDE':'GUI','LINESTOP':'LIM'}.get(kind) or node_type_mutation(attrs,config)
+    return {'REST':'+Y','GUIDE':'GUI','LINESTOP':'LIM'}.get(kind) or node_type_mutation(json_node_type_attrs(attrs,config),config)
 
 
-def preferred_scalar(attrs,config,field):
+def preferred_scalar(attrs,config,field,kind=''):
+    if restraint_precedence(config) and kind:
+        return str(select_restraint_scalar(attrs,config,field,kind,profile_for(kind,config))['value'])
     if not field_precedence(config,field):
         return ''
     aliases=('STIFFNESS','NODESTIFFNESS','CMPSUPSTIFF') if field=='stiffness' else ('FRICTION','CMPSUPFRICTION')
@@ -190,7 +194,7 @@ def kinds(entries, require, config=None):
             require(text(a.get('NODETYPE'))==original and isinstance(codes,list) and
                     len(codes)==1 and text(codes[0])==original, 'NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
         node_type_kind = approval or preferred or {'+Y': 'REST', 'GUI': 'GUIDE', 'LIM': 'LINESTOP'}.get(
-            node_type_mutation(a, config), '')
+            node_type_mutation(json_node_type_attrs(a,config), config), '')
         if preferred:
             configured_mapper_semantic_conflict(a,e['desc'],config,preferred,require)
         if node_type_kind and not (approval or preferred):
@@ -259,11 +263,13 @@ def kinds(entries, require, config=None):
         if not kind:
             continue
         raw = source_gap(a)
-        preferred_scalar(a,config,'stiffness');preferred_scalar(a,config,'friction')
+        preferred_scalar(a,config,'stiffness',kind);preferred_scalar(a,config,'friction',kind)
         # CMPSUPGAP is a source member's explicit gap. Historical NODEGAP=0
         # is a placeholder when this SAME member supplies CMPSUPGAP.
         # Two nonzero/different explicit values must still fail closed.
-        legacy_zero_placeholder = bool(text(a.get('CMPSUPGAP'))) and (
+        if restraint_precedence(config):
+            effective_gap(a,config,kind)
+        legacy_zero_placeholder = not restraint_precedence(config) and bool(text(a.get('CMPSUPGAP'))) and (
             text(a.get('NODEGAP')) != '' and numeric(a.get('NODEGAP')) == 0
         )
         prefer_catalogue=field_precedence(config,'gap') and any(text(a.get(k)) for k in ('CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'))
@@ -278,10 +284,11 @@ def kinds(entries, require, config=None):
                 'ignoredLegacyZero': text(a.get('NODEGAP')),
                 'reason': 'legacy-NODEGAP-zero-placeholder',
             }, sort_keys=True))
-        require(all(numeric(v) is not None for v in alias_values),
-                'NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
-        require(all(numeric(v) == numeric(raw) for v in alias_values),
-                'NATIVE_PREFINAL_RESTRAINT_GAP_AMBIGUOUS')
+        if not restraint_precedence(config):
+            require(all(numeric(v) is not None for v in alias_values),
+                    'NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
+            require(all(numeric(v) == numeric(raw) for v in alias_values),
+                    'NATIVE_PREFINAL_RESTRAINT_GAP_AMBIGUOUS')
         previous_attrs = out.get(kind, {})
         # A REST datum is a different structural source role from its co-located
         # AT01 shoe / AT05 wear-pad hardware; prioritize the true REST owner
@@ -294,7 +301,7 @@ def kinds(entries, require, config=None):
                     out[kind] = a
                 continue
         previous = source_gap(previous_attrs)
-        require(not (previous and raw and effective_gap(previous_attrs,config,kind) != effective_gap(a,config,kind)),
+        require(not (previous_attrs and (restraint_precedence(config) or (previous and raw)) and effective_gap(previous_attrs,config,kind) != effective_gap(a,config,kind)),
                 'NATIVE_PREFINAL_RESTRAINT_GAP_AMBIGUOUS')
         prior_type = effective_node_type(previous_attrs, config)
         current_type = effective_node_type(a, config)
@@ -307,7 +314,7 @@ def kinds(entries, require, config=None):
                 continue
             require(False, 'NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
         for scalar in ('stiffness','friction'):
-            left,right=preferred_scalar(previous_attrs,config,scalar),preferred_scalar(a,config,scalar)
+            left,right=(preferred_scalar(previous_attrs,config,scalar,kind) if previous_attrs else ''),preferred_scalar(a,config,scalar,kind)
             require(not (left and right and float(left)!=float(right)), 'NATIVE_PREFINAL_RESTRAINT_'+scalar.upper()+'_AMBIGUOUS')
         if kind not in out or (not previous and raw):
             out[kind] = a
@@ -321,6 +328,8 @@ def source_gap(a):
 
 
 def effective_gap(attrs,config,kind):
+    if restraint_precedence(config):
+        return select_restraint_gap(attrs,config,kind,profile_for(kind,config))['value']
     catalogue=any(text(attrs.get(k)) for k in ('CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'))
     saved=saved_profile_gap(config,kind)
     if field_precedence(config,'gap') and attrs and not catalogue and saved:
@@ -438,10 +447,14 @@ def append_profile(node, kind, attrs, config, allowed=None):
     if field_precedence(config,'gap') and attrs and saved_profile_gap(config,kind) and not any(
         text(attrs.get(k)) for k in ('CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS')):
         raw=''
+    if restraint_precedence(config):
+        selected_gap=select_restraint_gap(attrs,config,kind,p)
+        require_gap=selected_gap['value']
+        raw=text(selected_gap['raw']) if selected_gap['attribute'] else ''
     if require_gap is None or not math.isfinite(require_gap):
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
     gap = str(require_gap)
-    original_type = node_type_mutation(attrs, config)
+    original_type = node_type_mutation(json_node_type_attrs(attrs,config), config)
     conflict = mds_kind_conflict(attrs,config)
     approval = mds_kind_approval(attrs,config,conflict) if conflict else None
     preferred = '' if approval else preferred_kind(attrs,config,conflict)
@@ -461,8 +474,8 @@ def append_profile(node, kind, attrs, config, allowed=None):
         elif p['frictionMode'] == 'sentinel' and config.get('useFrictionSentinelForNonYSupports') is not False and typ not in ('Y', '+Y'):
             friction = '-1.010100'
         actual_gap = gap
-        friction = preferred_scalar(attrs,config,'friction') or friction
-        stiffness=preferred_scalar(attrs,config,'stiffness') or (text(p['stiffness']) if text(p['stiffness']) not in ('','default')
+        friction = preferred_scalar(attrs,config,'friction',kind) or friction
+        stiffness=preferred_scalar(attrs,config,'stiffness',kind) or (text(p['stiffness']) if text(p['stiffness']) not in ('','default')
                   else text(config.get('defaultStiffness')) or '1.751270E+12')
         values = [('Type', typ), ('Stiffness', stiffness),
                   ('Gap', actual_gap), ('Friction', friction)]
@@ -484,7 +497,7 @@ def append_profile(node, kind, attrs, config, allowed=None):
 # original-source audit. An unrelated display option does not.
 _RESTRAINT_AUDIT_CONFIG_KEYS = (
     'supportMapping', 'supportTypeMapper', 'inputXmlRestraintTypeMutation',
-    'restraintTypeMutation', 'xml229RestraintKindOverrides', 'xml229SourceFieldPrecedence',
+    'restraintTypeMutation', 'xml229RestraintKindOverrides', 'xml229SourceFieldPrecedence', 'xml229RestraintPrecedence',
     'defaultStiffness', 'defaultGap', 'defaultFriction',
     'useFrictionSentinelForNonYSupports', 'supportKindToXmlType',
     'dtxrPositionOffset', 'dtxrCoordinateToleranceMm', 'coordinateTolerance',
@@ -565,7 +578,7 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
     except (ValueError, UnicodeError):
         require(False, 'NATIVE_PREFINAL_RESTRAINT_SOURCE_INVALID')
     if stage['schema'] == 'XML229.PrefinalRestraints.v2':
-        require(not any(field_precedence(config,k) for k in ('type','gap','stiffness','friction','mappedCodes')), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_INVALID')
+        require(not restraint_precedence(config) and not any(field_precedence(config,k) for k in ('type','gap','stiffness','friction','mappedCodes')), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_INVALID')
         require(config.get('xml229PhysicalVertexPrefinal') is True and bool(raw.strip()),
                 'NATIVE_PREFINAL_RESTRAINT_MODE_DRIFT')
         from xml229_physical_vertex_prefinal import replay_physical_vertex_prefinal

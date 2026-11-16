@@ -1,6 +1,7 @@
 /** Private run evidence. Records existing decisions; never classifies or writes restraints. */
 import {digestCanonical, digestUtf8} from '../../contracts/gc-pw-v1/contract.mjs';
 
+import {restraintPrecedence,selectRestraintGap,selectRestraintScalar} from '../../converters/xml-cii2019-core/restraint-precedence-policy.js';
 import {mappedCodePrecedenceEnabled} from '../../converters/xml-cii2019-core/support-kind-precedence.js';
 
 export const RESTRAINT_AUDIT_SCHEMA = 'XML229.RestraintAudit.v1';
@@ -19,7 +20,7 @@ const sourceFields = ['NAME','REF','TYPE','RAW_TYPE','NODESTIFF','SOURCE_NODETYP
   'POS','POSI','COMPRE','ATTACHED_COMPONENT_REF','STIFFNESS','NODESTIFFNESS','FRICTION','NODEFRICTION',
   'DirectionCosineX','DirectionCosineY','DirectionCosineZ','DIRECTIONCOSINEX','DIRECTIONCOSINEY','DIRECTIONCOSINEZ'];
 const configKeys = ['supportMapping', 'supportTypeMapper', 'inputXmlRestraintTypeMutation',
-  'restraintTypeMutation', 'xml229RestraintKindOverrides', 'xml229SourceFieldPrecedence', 'defaultStiffness', 'defaultGap', 'defaultFriction',
+  'restraintTypeMutation', 'xml229RestraintKindOverrides', 'xml229SourceFieldPrecedence', 'xml229RestraintPrecedence', 'defaultStiffness', 'defaultGap', 'defaultFriction',
   'useFrictionSentinelForNonYSupports', 'supportKindToXmlType', 'dtxrPositionOffset',
   'dtxrCoordinateToleranceMm', 'coordinateTolerance', 'resolverJsonTrace', 'jsonTrace','xml229PhysicalVertexPrefinal','xml229SourceCoordinatePolicy','xml229SourceAttachmentPolicy'];
 
@@ -72,6 +73,11 @@ function fieldEvidence(name, after, before, selected, nodeGap, config, preserved
     attribute:selected?.decision?.rule?.matchEvidence?.sourceField||selected?.decision?.rule?.field||null,
     raw:selected?.decision?.rule?.matchEvidence?.value??attrs.NODETYPE??attrs.MDSDTXR??attrs.DTXR??null};
   const flag={Gap:'gap',Stiffness:'stiffness',Friction:'friction'}[name];
+  if(flag&&restraintPrecedence(config)&&selected?.decision?.kind){
+    const kind=selected.decision.kind;
+    const decision=flag==='gap'?selectRestraintGap(attrs,config,kind):selectRestraintScalar(attrs,config,flag,kind);
+    return {...decision,configuredRaw:decision.attribute?null:decision.raw};
+  }
   if(flag&&config.xml229SourceFieldPrecedence?.[flag]===true&&selected){
     const keys={gap:['CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'],
       stiffness:['STIFFNESS','NODESTIFFNESS','CMPSUPSTIFF'],friction:['FRICTION','CMPSUPFRICTION']}[flag];

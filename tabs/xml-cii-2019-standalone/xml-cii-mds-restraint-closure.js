@@ -1,3 +1,4 @@
+import {restraintPrecedence,selectRestraintGap,jsonNodeTypeAttrs,nodeTypeUsesMapper} from '../../converters/xml-cii2019-core/restraint-precedence-policy.js';
 import {
   applyXmlRestraints,
   restraintEntriesFromSupportKind,sourceSupportGap,preferredStagedScalar,
@@ -175,8 +176,8 @@ function supportKindFromMember(member,config={},observe=null) {
     const catalogue=['CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'].some(k=>text(attrs[k]));
     const saved=config.supportMapping?.kindProfiles?.[physicalConflict.candidateKind]?.gap;
     if(!preferred||preferred.kind!==physicalConflict.candidateKind||
-       (!catalogue&&!(config.xml229SourceFieldPrecedence?.gap===true&&saved!=null&&text(saved)!==''))){
-      const reason=config.xml229SourceFieldPrecedence?.type!==true&&!mappedCodePrecedenceApplies(attrs,config)?'STEP7_TYPE_PRECEDENCE_OFF':
+       (!restraintPrecedence(config)&&!catalogue&&!(config.xml229SourceFieldPrecedence?.gap===true&&saved!=null&&text(saved)!==''))){
+      const reason=config.xml229SourceFieldPrecedence?.type!==true&&nodeTypeUsesMapper(attrs,config)!==true&&!mappedCodePrecedenceApplies(attrs,config)?'STEP7_TYPE_PRECEDENCE_OFF':
         !preferred||preferred.kind!==physicalConflict.candidateKind?'STEP7_RULE_OR_EXPORTED_PROPOSAL_MISMATCH':
         'STEP7_GAP_POLICY_OR_SAVED_GAP_REQUIRED';
       const error=xml229RestraintConflictError(physicalConflict);
@@ -265,7 +266,7 @@ function sourceGapText(attrs){
 }
 
 function supportGapNumber(attrs,config={},kind=''){
-  if(config.xml229SourceFieldPrecedence?.gap===true&&kind){
+  if((restraintPrecedence(config)||config.xml229SourceFieldPrecedence?.gap===true)&&kind){
     try{return Number(sourceSupportGap(attrs,config,kind).gap);}
     catch(error){if(error.code)throw error;throw Object.assign(error,{code:String(error.message).includes('AMBIGUOUS')?'PREFINAL_RESTRAINT_GAP_AMBIGUOUS':'PREFINAL_RESTRAINT_GAP_INVALID'});}
   }
@@ -290,7 +291,7 @@ function supportGapNumber(attrs,config={},kind=''){
 function sourceNodeType(attrs,config){
   const preferred=stagedFieldKindDecision(attrs,config);
   if(preferred)return preferred.rule.effectiveXmlType;
-  const raw=text(attrs?.NODETYPE);
+  const raw=text(jsonNodeTypeAttrs(attrs,config)?.NODETYPE);
   if(!raw)return '';
   const selected=mutateRestraintType(raw,
     config.inputXmlRestraintTypeMutation||config.restraintTypeMutation||{});
@@ -331,7 +332,7 @@ function evidenceByKind(record, config = {}, requireUnambiguous = false, selecte
     let numeric=null;
     try {
       numeric=requireUnambiguous?supportGapNumber(original,config,kind):null;
-      preferredStagedScalar(original,config,'stiffness');preferredStagedScalar(original,config,'friction');
+      preferredStagedScalar(original,config,'stiffness',kind);preferredStagedScalar(original,config,'friction',kind);
     }
     catch(error) {
       if(!quarantine||!isQuarantinableXml229RestraintError(error))throw error;
@@ -343,7 +344,7 @@ function evidenceByKind(record, config = {}, requireUnambiguous = false, selecte
     const raw=sourceGapText(original);
     // The current XML writer understands CMPSUPGAP; the older source also
     // stored the same gap in NODEGAP. Preserve its value, including zero.
-    const attrs=config.xml229SourceFieldPrecedence?.gap!==true&&raw&&!text(original.CMPSUPGAP)&&!text(original.CMPSUPGAP_POS)
+    const attrs=!restraintPrecedence(config)&&config.xml229SourceFieldPrecedence?.gap!==true&&raw&&!text(original.CMPSUPGAP)&&!text(original.CMPSUPGAP_POS)
       &&!text(original.CMPSUPGAP_PS)?{...original,CMPSUPGAP:raw}:original;
     const choose=reason=>{
       result.set(kind,attrs);
@@ -363,7 +364,7 @@ function evidenceByKind(record, config = {}, requireUnambiguous = false, selecte
         continue;
       }
     }
-    if(requireUnambiguous&&previous&&sourceGapText(previous)&&raw&&
+    if(requireUnambiguous&&previous&&(restraintPrecedence(config)||(sourceGapText(previous)&&raw))&&
        supportGapNumber(previous,config,kind)!==numeric)
       {
         const error=Object.assign(new Error('Conflicting JSON gaps for the same support kind '+kind+': '+
@@ -392,7 +393,7 @@ function evidenceByKind(record, config = {}, requireUnambiguous = false, selecte
       blockedKinds.add(kind);result.delete(kind);selected.delete(kind);continue;
     }
     if(previous&&requireUnambiguous)for(const field of ['stiffness','friction']){
-      const a=preferredStagedScalar(previous,config,field),b=preferredStagedScalar(attrs,config,field);
+      const a=preferredStagedScalar(previous,config,field,kind),b=preferredStagedScalar(attrs,config,field,kind);
       if(a&&b&&Number(a)!==Number(b))throw Object.assign(Error('Conflicting same-kind '+field+' source members'),{code:'PREFINAL_RESTRAINT_'+field.toUpperCase()+'_AMBIGUOUS'});
     }
     if(!previous||(!sourceGapText(previous)&&raw))choose(previous?'explicit-source-gap':'first-qualified-kind-member');
@@ -556,7 +557,7 @@ export function closeGovernedMdsPositionRestraintsXml(xmlText, stagedJsonText, c
         const candidates=restraintEntriesFromSupportKind(kind, attrs, node, config)
           .map(entry=>({
             ...entry,type:selectedType||entry.type,
-            gap:config.xml229SourceFieldPrecedence?.gap===true?entry.gap:explicitGap?String(supportGapNumber(attrs)):entry.gap,
+            gap:(restraintPrecedence(config)||config.xml229SourceFieldPrecedence?.gap===true)?entry.gap:explicitGap?String(supportGapNumber(attrs)):entry.gap,
           }));
         note.selections.push({kind,types:candidates.map(entry=>normalizeXmlType(entry?.type||entry)),
           source:selected.get(kind)||null});

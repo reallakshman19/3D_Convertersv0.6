@@ -1,3 +1,4 @@
+import {restraintPrecedence,nodeTypeUsesMapper,jsonNodeTypeAttrs} from './restraint-precedence-policy.js';
 import { mutateRestraintType } from './restraint-type-mutation.js';
 import { migrateSupportMappingConfig } from './support-mapping-config.js';
 
@@ -213,17 +214,21 @@ export function generatedSupportKind(attrs = {}) {
 // Missing policy defaults ON in qualified V1; explicit OFF survives reload.
 // V2 has not qualified this authority: absent remains OFF, explicit ON is rejected by pre-Final.
 export function mappedCodePrecedenceEnabled(config={}) {
+  const policy=restraintPrecedence(config);
+  if(policy)return policy.nodeType.primary==='supportMapper'||policy.nodeType.fallback==='supportMapper';
   const value=config.xml229SourceFieldPrecedence?.mappedCodes;
   return value===true || (value===undefined && config.xml229PhysicalVertexPrefinal!==true);
 }
 export function mappedCodePrecedenceApplies(attrs={},config={}) {
-  return mappedCodePrecedenceEnabled(config) &&
+  return (nodeTypeUsesMapper(attrs,config)??mappedCodePrecedenceEnabled(config)) &&
     (Object.hasOwn(attrs,'NODETYPE_CODES')||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING');
 }
 export function stagedFieldKindDecision(attrs={},config={}) {
+  const mode=nodeTypeUsesMapper(attrs,config);
+  if(mode===false)return null;
   const policy=config.xml229SourceFieldPrecedence||{};
   const mapped=mappedCodePrecedenceApplies(attrs,config);
-  if(!mapped&&policy.type!==true)return null;
+  if(!mapped&&mode!==true&&policy.type!==true)return null;
   // Mapped-code precedence is a selected policy, not permission to infer
   // a code from generated labels or accept an incomplete exporter receipt.
   if(mapped&&(!text(attrs.SOURCE_NODETYPE)||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)!=='STEP7_SUPPORT_MAPPING'||
@@ -271,6 +276,7 @@ export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED
       !Array.isArray(attrs.NODETYPE_CODES)||attrs.NODETYPE_CODES.length!==1||
       text(attrs.NODETYPE_CODES[0])!==text(attrs.SOURCE_NODETYPE)))
     throw refuse('PREFINAL_RESTRAINT_TYPE_AMBIGUOUS','Mapped restraint codes could not be validated against the current Step 7 rule');
+  attrs=jsonNodeTypeAttrs(attrs,config);
   const byNodeType = nodeTypeSupportKind(attrs, config);
   if (byNodeType && governed.includes(byNodeType)) {
     // A user-authored Step 7 row that names this member as another governed

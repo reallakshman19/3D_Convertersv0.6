@@ -3,6 +3,7 @@
 Source rows come from saved supportTypeMapper.rows, not from a claimed Worker
 resolution. Non-REST/GUIDE/LINESTOP targets never fabricate governed restraints.
 """
+from xml229_restraint_precedence import restraint_precedence, node_type_uses_mapper
 import json
 import math
 import re
@@ -684,6 +685,9 @@ def owner_rule_kind(attrs, config, governed=('REST', 'GUIDE', 'LINESTOP')):
 
 
 def mapped_code_precedence_enabled(config):
+    current = restraint_precedence(config)
+    if current:
+        return 'supportMapper' in (current['nodeType']['primary'],current['nodeType']['fallback'])
     policy = config.get('xml229SourceFieldPrecedence') or {}
     if 'mappedCodes' in policy:
         return policy['mappedCodes'] is True
@@ -691,16 +695,20 @@ def mapped_code_precedence_enabled(config):
 
 
 def mapped_code_precedence_applies(attrs, config):
-    return mapped_code_precedence_enabled(config) and (
+    mode = node_type_uses_mapper(attrs,config)
+    return (mapped_code_precedence_enabled(config) if mode is None else mode) and (
         'NODETYPE_CODES' in attrs or
         str(attrs.get('NODETYPE_CLASSIFICATION_SOURCE') or '').strip() == 'STEP7_SUPPORT_MAPPING')
 
 
 def staged_field_kind_decision(attrs, config, original_kind):
     """Explicit source-field precedence; no generated labels or NODETYPE rule."""
+    mode = node_type_uses_mapper(attrs,config)
+    if mode is False:
+        return ''
     policy = config.get('xml229SourceFieldPrecedence') or {}
     mapped = mapped_code_precedence_applies(attrs, config)
-    if (not mapped and policy.get('type') is not True) or not original_kind:
+    if (not mapped and mode is not True and policy.get('type') is not True) or not original_kind:
         return ''
     if mapped and (not str(attrs.get('SOURCE_NODETYPE') or '').strip() or
         str(attrs.get('NODETYPE_CLASSIFICATION_SOURCE') or '').strip() != 'STEP7_SUPPORT_MAPPING' or
