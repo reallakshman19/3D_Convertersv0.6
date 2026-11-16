@@ -23,7 +23,11 @@ const staged=()=>[{type:'BRANCH',name:branch,children:[
  {type:'DTXR_POS',attributes:{POSI:'300 0 0'},children:[{type:'GT500',attributes:{MDSSUPPTYPE:'GT500',NAME:'/PS40/DATUM',CMPSUPGAP:6}}]},
  {type:'DTXR_POS',attributes:{POSI:'400 0 0'},children:[{type:'ST501',attributes:{MDSSUPPTYPE:'ST501',NAME:'/PS50/DATUM',CMPSUPGAP:8}}]},
 ]}];
-const config={defaultGap:7,defaultFriction:0,defaultStiffness:123456,
+// The 7 mm REST fallback is configured in the Step 7 kind profile. The global
+// defaultGap is deliberately different and must not control emitted gaps.
+const config={defaultGap:99,defaultFriction:0,defaultStiffness:123456,
+ supportMapping:{version:2,useJsonForRestraints:true,kindProfiles:{
+  REST:{gap:'7'},GUIDE:{gap:'11'},LINESTOP:{gap:'13'}}},
  useJsonTraceStagedSource:false,dtxrPositionOffset:{enabled:true,xOffset:0,yOffset:0,zOffset:0}};
 const rows=doc=>[...doc.getElementsByTagName('Node')].map(n=>({id:field(n,'NodeNumber'),
  restraints:[...n.getElementsByTagName('Restraint')].map(r=>[field(r,'Type'),field(r,'Gap'),field(r,'Friction')])}));
