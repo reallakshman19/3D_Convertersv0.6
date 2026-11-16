@@ -75,8 +75,7 @@ def mds_kind_conflict(attrs, config):
     catalogue = text(attrs.get('CMPSUPTYPE')).upper()
     gap = text(attrs.get('CMPSUPGAP'))
     if (not re.fullmatch(func + r'[0-9]+', mds) or
-            not re.fullmatch(r'LS-[A-Z0-9-]+' if func == 'ST' else r'PG-[A-Z0-9-]+', catalogue) or
-            not re.search(r'[-+]?\d+(?:\.\d+)?\s*mm', gap, re.I)):
+            not re.fullmatch(r'LS-[A-Z0-9-]+' if func == 'ST' else r'PG-[A-Z0-9-]+', catalogue)):
         return None
     source_kind = {'+Y':'REST','GUI':'GUIDE','LIM':'LINESTOP'}.get(node_type_mutation(attrs,config), '')
     physical_kind = 'LINESTOP' if func == 'ST' else 'GUIDE'
@@ -91,6 +90,8 @@ def mds_kind_conflict(attrs, config):
 
 def mds_kind_approval(attrs, config, conflict):
     if not conflict:
+        return None
+    if not re.search(r'[-+]?\d+(?:\.\d+)?\s*mm', conflict['fields']['CMPSUPGAP'], re.I):
         return None
     rows = config.get('xml229RestraintKindOverrides') or []
     if not isinstance(rows, list):
