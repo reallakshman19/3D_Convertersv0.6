@@ -289,6 +289,23 @@ function isRestHardwareMember(attrs,kind) {
 function evidenceByKind(record, config = {}, requireUnambiguous = false, selected=new Map(),
                         evaluations=[],warnings=[],quarantine=false) {
   const result=new Map(),blockedKinds=new Set();
+  const memberTypes=new Map();
+  for(const member of Array.isArray(record?.positionMembers)?record.positionMembers:[]){
+    const attrs=memberAttributes(member);
+    const name=text(attrs.NAME).toUpperCase(),rawType=text(attrs.NODETYPE);
+    if(!name||!rawType)continue;
+    const previous=memberTypes.get(name);
+    if(previous&&previous!==rawType){
+      const error=Object.assign(new Error('Conflicting NODETYPE for exact staged member '+name),
+        {code:'PREFINAL_RESTRAINT_TYPE_AMBIGUOUS',sourceName:name,
+          sourceKinds:[previous,rawType]});
+      if(!quarantine)throw error;
+      warnings.push({code:error.code,member:restraintAuditMember(member,null,'quarantined-duplicate-member'),
+        message:error.message,sourceKinds:error.sourceKinds});
+      return result;
+    }
+    memberTypes.set(name,rawType);
+  }
   for(const member of Array.isArray(record?.positionMembers)?record.positionMembers:[]){
     let decision=null,kind='';
     try { kind=supportKindFromMember(member,config,value=>{decision=value;}); }
