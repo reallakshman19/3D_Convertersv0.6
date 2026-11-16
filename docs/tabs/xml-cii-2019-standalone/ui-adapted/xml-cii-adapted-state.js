@@ -460,7 +460,9 @@ export function updateResolverJsonTraceConfig(state, value) {
     if (typeof localStorage !== 'undefined') {
       try { localStorage.setItem('xml-cii-resolver-config-v1', JSON.stringify(config)); } catch {}
     }
-    return updateWorkflowState(state, { resolverJsonTraceConfig: config });
+    return updateWorkflowState(state, { resolverJsonTraceConfig: config,
+      jsonTraceSidecarCsv:'',jsonTraceSidecarRowCount:0,
+      jsonTraceSidecarStatus:'Resolver configuration changed; rebuild staged JSON trace sidecar.' });
   }
   catch { return updateWorkflowState(state, { resolverJsonTraceWriteBackStatus: 'Resolver config JSON is invalid.' }); }
 }
@@ -470,7 +472,9 @@ export function patchResolverJsonTraceConfig(state, patch = {}) {
   if (typeof localStorage !== 'undefined') {
     try { localStorage.setItem('xml-cii-resolver-config-v1', JSON.stringify(config)); } catch {}
   }
-  return updateWorkflowState(state, { resolverJsonTraceConfig: config });
+  return updateWorkflowState(state, { resolverJsonTraceConfig: config,
+    jsonTraceSidecarCsv:'',jsonTraceSidecarRowCount:0,
+    jsonTraceSidecarStatus:'Resolver configuration changed; rebuild staged JSON trace sidecar.' });
 }
 
 
