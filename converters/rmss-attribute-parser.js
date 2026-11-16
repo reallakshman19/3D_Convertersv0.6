@@ -147,6 +147,30 @@ function parseTextBlocks(content) {
 // DTXR is intentionally excluded by default: it can contain support text such as GUIDE/REST.
 const BORE_FIELDS = ['HBOR', 'TBOR', 'ABORE', 'LBORE', 'BORE', 'NBORE', 'DBOR'];
 
+// ATT/RVM export policy only: corroborating MDS member codes plus an explicit
+// non-negative millimetre clearance supersede the copied generic REST code.
+// Retain the original ATT NODETYPE. Do not guess a gap or change unrelated codes.
+export function normalizeAttRvmMdsMember(attrs = {}) {
+  const upper = value => String(value ?? '').trim().toUpperCase();
+  const fn = upper(attrs.MDSSUPPFUNC);
+  const mds = upper(attrs.MDSSUPPTYPE);
+  const catalogue = upper(attrs.CMPSUPTYPE);
+  const rawType = upper(attrs.NODETYPE);
+  const isGuide = fn === 'GT' && /^GT\d+$/.test(mds) && /^PG-[A-Z0-9-]+$/.test(catalogue);
+  const isStop = fn === 'ST' && /^ST\d+$/.test(mds) && /^LS-[A-Z0-9-]+$/.test(catalogue);
+  if (!isGuide && !isStop) return '';
+  const kind = isGuide ? 'GUIDE' : 'LINESTOP';
+  const target = isGuide ? '8' : '9';
+  if (rawType === target) return kind;
+  if (rawType !== '14' ||
+      !/^(?:GAP\s*=\s*)?\+?(?:\d+(?:\.\d+)?|\.\d+)\s*MM$/i.test(String(attrs.CMPSUPGAP ?? '').trim())) return '';
+  if (attrs.SOURCE_NODETYPE != null && upper(attrs.SOURCE_NODETYPE) !== '14') return '';
+  attrs.SOURCE_NODETYPE = attrs.NODETYPE;
+  attrs.NODETYPE = target;
+  attrs.NODETYPE_CLASSIFICATION_SOURCE = 'ATT_RVM_MDS_MEMBER';
+  return kind;
+}
+
 function normalizeSupportType(attrs, fallbackText = '') {
   const text = [
     attrs?.CMPSUPTYPE,
@@ -1081,7 +1105,9 @@ export function parseRmssStructuralMembers(content, options = {}) {
     const label = ownerTail ? `${ownerTail}/${memberName}` : memberName;
 
     const attrs = block?.attributes || {};
-    const kind = resolveKindPure(attrs, {
+    const memberKind = options.normalizeAttRvmMdsMembers === true && canonicalComponentType(rawType) === 'SUPPORT'
+      ? normalizeAttRvmMdsMember({ ...attrs }) : '';
+    const kind = memberKind || resolveKindPure(attrs, {
       userRules: [],
       defaultRules: DEFAULT_RULES,
       kindMap: DEFAULT_KIND_MAP,
