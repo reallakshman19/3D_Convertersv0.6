@@ -4,7 +4,7 @@ This deliberately does not copy restraint values out of the Worker snapshot.
 The caller retains the whole-XML comparison after replaying this bounded stage.
 """
 from xml229_support_type_mapper import (owner_rule_kind, node_type_user_row_conflict, mapped_support_kind, configured_support_rule,
-                                         configured_mapper_semantic_conflict)
+                                         configured_mapper_semantic_conflict, described_kinds)
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -65,16 +65,81 @@ def is_rest_hardware_member(attrs, kind):
             (code == 'AT05' and re.search(r'\bWEAR\s+PLATE\b', desc)))
 
 
+
+def mds_kind_conflict(attrs, config):
+    """Independently corroborated ST/GT hardware conflicts with staged NODETYPE."""
+    func = text(attrs.get('MDSSUPPFUNC')).upper()
+    if func not in ('ST', 'GT'):
+        return None
+    mds = text(attrs.get('MDSSUPPTYPE')).upper()
+    catalogue = text(attrs.get('CMPSUPTYPE')).upper()
+    gap = text(attrs.get('CMPSUPGAP'))
+    if (not re.fullmatch(func + r'[0-9]+', mds) or
+            not re.fullmatch(r'LS-[A-Z0-9-]+' if func == 'ST' else r'PG-[A-Z0-9-]+', catalogue)):
+        return None
+    source_kind = {'+Y':'REST','GUI':'GUIDE','LIM':'LINESTOP'}.get(node_type_mutation(attrs,config), '')
+    physical_kind = 'LINESTOP' if func == 'ST' else 'GUIDE'
+    if not source_kind or physical_kind == source_kind:
+        return None
+    return {'code': 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT',
+            'sourceKind': source_kind, 'candidateKind': physical_kind,
+            'sourceName': text(attrs.get('NAME')),
+            'fields': {k: text(attrs.get(k)) for k in
+                ('NAME','NODETYPE','MDSSUPPFUNC','MDSSUPPTYPE','CMPSUPTYPE','CMPSUPGAP')}}
+
+
+def mds_kind_approval(attrs, config, conflict):
+    if not conflict:
+        return None
+    if not re.search(r'[-+]?\d+(?:\.\d+)?\s*mm', conflict['fields']['CMPSUPGAP'], re.I):
+        return None
+    rows = config.get('xml229RestraintKindOverrides') or []
+    if not isinstance(rows, list):
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_OVERRIDE_INVALID')
+    matches = [row for row in rows if isinstance(row, dict) and
+               text(row.get('memberName')) == conflict['sourceName']]
+    if len(matches) > 1:
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_OVERRIDE_AMBIGUOUS')
+    if not matches:
+        return None
+    row = matches[0]
+    if (row.get('approved') is not True or
+            text(row.get('kind')).upper() != conflict['candidateKind'] or
+            not text(row.get('approvedBy')) or not text(row.get('evidenceRef'))):
+        return None
+    expected = row.get('expected') or {}
+    if not isinstance(expected, dict) or any(text(expected.get(k)) != v
+        for k,v in conflict['fields'].items()):
+        return None
+    return conflict['candidateKind']
+
+
 def kinds(entries, require, config=None):
     config = config or {}
     out = {}
+    # Two staged rows asserting different NODETYPE for one exact physical
+    # NAME are not two independent restraints; the same member is ambiguous.
+    by_name = {}
+    for entry in entries:
+        attrs = entry.get('attrs') or {}
+        name = text(attrs.get('NAME')).upper()
+        raw_type = text(attrs.get('NODETYPE'))
+        if name and raw_type:
+            prior = by_name.get(name)
+            require(not (prior and prior != raw_type),
+                    'NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
+            by_name[name] = raw_type
     for e in entries:
         a = e['attrs']
         # Owner rule (12 Nov, RCA-04): the source NODETYPE (after the 8 Config
         # mutation) wins when present: 14 -> REST, 8 -> GUIDE, 9 -> LINESTOP.
-        node_type_kind = {'+Y': 'REST', 'GUI': 'GUIDE', 'LIM': 'LINESTOP'}.get(
+        conflict = mds_kind_conflict(a,config)
+        approval = mds_kind_approval(a,config,conflict) if conflict else None
+        if conflict:
+            require(bool(approval), 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+        node_type_kind = approval or {'+Y': 'REST', 'GUI': 'GUIDE', 'LIM': 'LINESTOP'}.get(
             node_type_mutation(a, config), '')
-        if node_type_kind:
+        if node_type_kind and not approval:
             node_type_user_row_conflict(a, config, node_type_kind)
         table_kind = '' if node_type_kind else owner_rule_kind(a, config)[0]
         if table_kind:
@@ -276,6 +341,12 @@ def node_type_mutation(attrs, config):
                 expected = {'+Y': '14', 'GUI': '8', 'LIM': '9'}.get(text(label).upper())
                 if expected and text(target) != expected:
                     raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+                # A user-authored mutation from a non-governed CAESAR type
+                # into REST/GUI/LIM cannot contradict an explicit source DTXR.
+                target_kind = {'14':'REST','8':'GUIDE','9':'LINESTOP'}.get(text(target))
+                explicit = described_kinds(attrs)
+                if target_kind and len(explicit) == 1 and explicit[0] != target_kind:
+                    raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
                 if not re.fullmatch(r'[0-9]+', text(target)) or not 1 <= int(target) <= 62:
                     raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_INVALID')
                 value = int(target)
@@ -292,6 +363,12 @@ def append_profile(node, kind, attrs, config, allowed=None):
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
     gap = str(require_gap)
     original_type = node_type_mutation(attrs, config)
+    conflict = mds_kind_conflict(attrs,config)
+    approval = mds_kind_approval(attrs,config,conflict) if conflict else None
+    if conflict and not approval:
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+    if approval:
+        original_type = {'REST': '+Y', 'GUIDE': 'GUI', 'LINESTOP': 'LIM'}[approval]
     if original_type in ('+Y','GUI','LIM') and original_type != {
             'REST':'+Y','GUIDE':'GUI','LINESTOP':'LIM'}[kind]:
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
@@ -318,7 +395,59 @@ def append_profile(node, kind, attrs, config, allowed=None):
             allowed.add(present_type(typ))
 
 
-def replay_prefinal_restraints(expected, packet, staged_json_path, config, require):
+
+# This allow-list is kept in parity with restraintAuditConfig() in
+# tabs/xml-cii-2019-standalone/xml-cii-restraint-audit.js. It is intentionally
+# narrow: any changed field governing restraints invalidates the pre-Final
+# original-source audit. An unrelated display option does not.
+_RESTRAINT_AUDIT_CONFIG_KEYS = (
+    'supportMapping', 'supportTypeMapper', 'inputXmlRestraintTypeMutation',
+    'restraintTypeMutation', 'xml229RestraintKindOverrides',
+    'defaultStiffness', 'defaultGap', 'defaultFriction',
+    'useFrictionSentinelForNonYSupports', 'supportKindToXmlType',
+    'dtxrPositionOffset', 'dtxrCoordinateToleranceMm', 'coordinateTolerance',
+    'resolverJsonTrace', 'jsonTrace', 'xml229PhysicalVertexPrefinal',
+    'xml229SourceCoordinatePolicy', 'xml229SourceAttachmentPolicy',
+)
+
+
+def verify_prefinal_restraint_config_custody(final, stage, config, require):
+    # Authentic source-bound Final geometry includes a signed-in-the-packet
+    # restraint audit. Small isolated replay unit fixtures without the Final
+    # geometry schema retain their explicit fixture API behavior.
+    complete = final.get('schema') == 'XML229.FinalizedWeightGeometry.v1'
+    audit = stage.get('restraintAudit')
+    if complete:
+        require(isinstance(audit, dict) and
+                isinstance(audit.get('recordedConfig'), dict) and
+                isinstance(audit.get('basis'), dict) and
+                isinstance(audit.get('basis', {}).get('configSha256'), str),
+                'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')
+    if audit is None:
+        return
+    require(isinstance(audit, dict) and isinstance(audit.get('recordedConfig'), dict),
+            'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')
+    current = {key: config[key] for key in _RESTRAINT_AUDIT_CONFIG_KEYS if key in config}
+    recorded = audit['recordedConfig']
+    require(current == recorded,
+            'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')
+    # Verify that the recorded config was not changed without updating its
+    # source-bound pre-Final SHA. Canonical ordering follows the JS producer.
+    def canonical(value):
+        if isinstance(value, dict):
+            return {key: canonical(value[key]) for key in sorted(value)}
+        if isinstance(value, list):
+            return [canonical(item) for item in value]
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        return value
+    digest = hashlib.sha256(json.dumps(canonical(recorded), sort_keys=True,
+       ensure_ascii=False, separators=(',', ':')).encode('utf-8')).hexdigest()
+    require(digest == audit['basis'].get('configSha256'),
+            'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')
+
+
+def replay_prefinal_restraints(expected, packet, staged_json_path, config, require, provenance_config=None):
     final = packet.get('finalizedGeometry') or {}
     stage = final.get('prefinalRestraints')
     if stage is None:
@@ -332,6 +461,8 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
             (not packet.get('originalJsonSha256') or packet['originalJsonSha256'] == sha),
             'NATIVE_PREFINAL_RESTRAINT_SOURCE_SHA_DRIFT')
     require(isinstance(config, dict), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_REQUIRED')
+    verify_prefinal_restraint_config_custody(final, stage,
+        provenance_config if provenance_config is not None else config, require)
     wants_v2=config.get('xml229PhysicalVertexPrefinal') is True and bool(raw.strip()) and \
         (config.get('supportMapping') or {}).get('useJsonForRestraints') is not False
     require(stage['schema']==('XML229.PrefinalRestraints.v2' if wants_v2 else 'XML229.PrefinalRestraints.v1'),
@@ -360,7 +491,7 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
         if typ not in ('ATTA', 'ANCI'):
             continue
         evidence = kinds(resolve(node, branch, groups, tolerance(config), field, require,
-                                 resolver_index), require, config)
+                                 resolver_index, config), require, config)
         if evidence:
             for r in children(node, 'Restraint'):
                 if placeholder(r):

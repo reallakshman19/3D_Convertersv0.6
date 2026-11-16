@@ -261,6 +261,7 @@ export function createXmlCiiAdaptedWorkflowState() {
     supportConfigJson: configJson,
     regexTesterConfig: getStoredRegexConfig(), regexTesterResult: null, regexTesterRunning: false, regexTesterWriteBackStatus: '',
     resolverJsonTraceConfig: getStoredResolverConfig(), resolverJsonTraceResult: null, resolverJsonTraceJsonResult: null, resolverJsonTraceTableResult: null, resolverJsonTraceRunning: false, resolverJsonTraceWriteBackStatus: '',
+    jsonTraceSidecarCsv: '', jsonTraceSidecarFileName:'staged-json-trace-sidecar.csv', jsonTraceSidecarRowCount:0, jsonTraceSidecarStatus:'',
     jsonTraceTableText: '', jsonTraceTableRows: [], jsonTraceTableFieldMap: {}, jsonTraceTableConfig: createDefaultTraceTableConfig(), jsonTraceTableSourceName: '', jsonTraceTableSheetNames: [], jsonTraceTableActiveSheet: '', jsonTraceTableWorkbookData: null, jsonTraceTableStatus: '', jsonTraceTableBenchmark: null,
     manualElementSideloadConfig: createDefaultManualElementSideloadConfig(), manualElementSideloadResult: null, manualElementSideloadRunning: false, manualElementSideloadWriteBackStatus: '',
     previewDiagnosticsAuditReport: null, previewDiagnosticsAuditStatus: '',
@@ -459,7 +460,9 @@ export function updateResolverJsonTraceConfig(state, value) {
     if (typeof localStorage !== 'undefined') {
       try { localStorage.setItem('xml-cii-resolver-config-v1', JSON.stringify(config)); } catch {}
     }
-    return updateWorkflowState(state, { resolverJsonTraceConfig: config });
+    return updateWorkflowState(state, { resolverJsonTraceConfig: config,
+      jsonTraceSidecarCsv:'',jsonTraceSidecarRowCount:0,
+      jsonTraceSidecarStatus:'Resolver configuration changed; rebuild staged JSON trace sidecar.' });
   }
   catch { return updateWorkflowState(state, { resolverJsonTraceWriteBackStatus: 'Resolver config JSON is invalid.' }); }
 }
@@ -469,7 +472,9 @@ export function patchResolverJsonTraceConfig(state, patch = {}) {
   if (typeof localStorage !== 'undefined') {
     try { localStorage.setItem('xml-cii-resolver-config-v1', JSON.stringify(config)); } catch {}
   }
-  return updateWorkflowState(state, { resolverJsonTraceConfig: config });
+  return updateWorkflowState(state, { resolverJsonTraceConfig: config,
+    jsonTraceSidecarCsv:'',jsonTraceSidecarRowCount:0,
+    jsonTraceSidecarStatus:'Resolver configuration changed; rebuild staged JSON trace sidecar.' });
 }
 
 

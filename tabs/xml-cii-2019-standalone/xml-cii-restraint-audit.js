@@ -17,7 +17,7 @@ const sourceFields = ['NAME','REF','TYPE','RAW_TYPE','NODESTIFF','MDSSUPPFUNC','
   'POS','POSI','COMPRE','ATTACHED_COMPONENT_REF','STIFFNESS','NODESTIFFNESS','FRICTION','NODEFRICTION',
   'DirectionCosineX','DirectionCosineY','DirectionCosineZ','DIRECTIONCOSINEX','DIRECTIONCOSINEY','DIRECTIONCOSINEZ'];
 const configKeys = ['supportMapping', 'supportTypeMapper', 'inputXmlRestraintTypeMutation',
-  'restraintTypeMutation', 'defaultStiffness', 'defaultGap', 'defaultFriction',
+  'restraintTypeMutation', 'xml229RestraintKindOverrides', 'defaultStiffness', 'defaultGap', 'defaultFriction',
   'useFrictionSentinelForNonYSupports', 'supportKindToXmlType', 'dtxrPositionOffset',
   'dtxrCoordinateToleranceMm', 'coordinateTolerance', 'resolverJsonTrace', 'jsonTrace','xml229PhysicalVertexPrefinal','xml229SourceCoordinatePolicy','xml229SourceAttachmentPolicy'];
 

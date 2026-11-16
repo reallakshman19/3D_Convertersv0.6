@@ -54,6 +54,15 @@ export function nodeTypeSupportKind(attrs = {}, config = {}) {
     throw refuse('PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT',
       `8 Config row ${text(row.label)} maps NODETYPE ${text(row.from)} to ${text(row.to)}, not ${labelCode}`);
   }
+  // Authored type mutations cannot contradict an independent, unambiguous
+  // DTXR/MDSDTXR kind (unmodified source NODETYPE precedence is unchanged).
+  if (row) {
+    const selectedKind = KIND_BY_CAESAR_CODE[Number(text(row.to))] || '';
+    const described = describedKinds(attrs);
+    if (selectedKind && described.length === 1 && described[0] !== selectedKind)
+      throw refuse('PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT',
+        'Authored NODETYPE mutation contradicts explicit source description');
+  }
   const code = Number(mutateRestraintType(raw, mutation));
   if(!Number.isInteger(code)||code<1||code>62)
     throw refuse('PREFINAL_RESTRAINT_TYPE_INVALID','Source NODETYPE or its configured mutation is outside CAESAR codes 1–62');
