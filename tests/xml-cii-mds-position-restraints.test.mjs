@@ -291,3 +291,21 @@ test('quarantined unmatched ATTA cannot get an invented fallback restraint',asyn
  assert.equal(preview.document.getElementsByTagName('Restraint').length,0);
  assert.equal(preview.stats.attaDefaultRestRestraintsAdded,0);
 });
+
+test('ATT proposed NODETYPE cannot hide original BM3 ST/GT classification conflicts',()=>{
+ const synthetic=JSON.parse(BM3_JSON);
+ for(const [index,proposed] of [[2,'9'],[3,'8']]){
+  const a=synthetic[0].children[index].attributes;
+  a.SOURCE_NODETYPE='14';a.NODETYPE=proposed;
+  a.NODETYPE_CLASSIFICATION_SOURCE='STEP7_SUPPORT_MAPPING';
+ }
+ const json=JSON.stringify(synthetic);
+ const review=closeGovernedMdsPositionRestraintsXml(BM3_XML,json,BM3_CONFIG,
+  {requireUnambiguous:true,conflictPolicy:'quarantine'});
+ assert.equal(review.engineeringRestraintAcceptance,'HOLD');
+ assert.deepEqual(review.warnings.map(w=>w.candidateKind).sort(),['GUIDE','LINESTOP']);
+ assert.deepEqual(review.warnings.map(w=>w.member.fields.NAME).sort(),
+  ['/SL-1840203.1.2','/SL-1840203.1.3']);
+ assert.throws(()=>closeGovernedMdsPositionRestraintsXml(BM3_XML,json,BM3_CONFIG,
+  {requireUnambiguous:true}),{code:'PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT'});
+});
