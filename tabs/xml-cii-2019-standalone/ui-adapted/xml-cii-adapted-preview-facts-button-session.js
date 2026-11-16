@@ -10,7 +10,7 @@ import {assertBasisDigest,assertContentDigest,digestUtf8,digestCanonical,canonic
   from '../../../contracts/gc-pw-v1/contract.mjs';
 
 import {executeXml229OriginalPreview} from '../integration/xml229-preview-original-blob-execution.mjs';
-import { recordPreviewFailure } from './xml-cii-adapted-preview-failure-notice.js';
+import { recordPreviewFailure,showRestraintReview } from './xml-cii-adapted-preview-failure-notice.js';
 
 const jobs=new WeakMap();
 const esc=(v)=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;')
@@ -135,6 +135,7 @@ export async function runPreviewButtonSession({
   };
   const retry=()=>void runPreviewButtonSession({host,rootEl,xmlText,config,options,renderResult});
   const begun=Date.now();
+  recordPreviewFailure(null);
   try {
     // Validate explicit original scope before reading JSON or dispatching any Worker.
     const scope=sourceScope(host,config,options);
@@ -199,11 +200,13 @@ export async function runPreviewButtonSession({
         evidence.setAttribute('data-mc-preview-verified-engineering','');
         evidence.setAttribute('role','status');
         evidence.className='model-converters-workflow-detail-note';
-        evidence.textContent='Verified original engineering Preview: '+
+        evidence.textContent=(result.restraintReview?.status==='HOLD'?'Source-verified Preview / Weight facts — restraint acceptance HOLD: ':'Verified original engineering Preview: ')+
           proof.verifiedPhysicalCount+' physical components / '+
           proof.verifiedFactCount+' complete FactRecords. '+
           'Weight Match uses this same session; native CII Run remains HELD.';
         host.prepend(evidence);
+         recordPreviewFailure(null);
+         showRestraintReview(host,result.restraintReview);
         if(r)options.onOriginalWorkerPreviewCompleted?.({
           result,sourceReceipt:r,basisId:verified.receipt.basisId});
         // This completed session belongs to the shared GC-PW review, not to
