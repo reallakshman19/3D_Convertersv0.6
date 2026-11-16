@@ -252,7 +252,7 @@ function buildRvmAttrResponseFromAttText(attText, inputName, options) {
   if (!hierarchy.length) {
     throw new Error(`Scope filter ${JSON.stringify(scope.pattern)} did not match any ATT/RVM branch/site.`);
   }
-  const xmlFromAtt = _buildPsiXmlFromRmssHierarchy(hierarchy, inputName, options);
+  const xmlFromAtt = _buildPsiXmlFromRmssHierarchy(hierarchy, inputName, {...options,attRvmSource:'ATT'});
   let attStpText = null;
   // Exact structural ownership comes from the original ATT NAME/OWNER graph,
   // not from wildcard-only label matching or a branch-derived prefix guess.
@@ -422,7 +422,9 @@ export async function run(context) {
               logs: mergeStageLogs(stages),
               endpoint: nativeJson.endpoint,
             };
-          } catch {}
+          } catch (error) {
+            if (error?.code === 'PREFINAL_RESTRAINT_CONFIG_INVALID') throw error;
+          }
 
           try {
             const parsedPayload = JSON.parse(jsonOutput.text);
@@ -478,6 +480,7 @@ export async function run(context) {
         }
       }
     } catch (error) {
+      if (error?.code === 'PREFINAL_RESTRAINT_CONFIG_INVALID') throw error;
       stages.push({ title: 'JSON -> XML fallback note', logs: { stdout: [], stderr: [toText(error?.message || error)] } });
     }
   }
