@@ -1,3 +1,4 @@
+import {selectRestraintGap,selectRestraintScalar,restraintPrecedence} from './restraint-precedence-policy.js';
 import {governedSupportKind} from './support-kind-precedence.js';
 import {
   resolveKindDescriptor,
@@ -436,6 +437,8 @@ function supportProfileForKind(kind, config = {}) {
 // evidence, not absence; NODEGAP=0 is the established placeholder only when
 // the same source member supplies CMPSUPGAP.
 export function sourceSupportGap(attrs = {}, config = {}, kind = '') {
+  const selected=selectRestraintGap(attrs,config,kind);
+  if(selected)return {raw:selected.attribute?toText(selected.raw):'',gap:String(selected.value),explicit:!!selected.attribute,authority:selected.authority};
   const aliases=['CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS','NODEGAP'];
   const fields=aliases.map(key=>({key,raw:toText(attrs?.[key]).trim()})).filter(f=>f.raw!=='');
   const parse=raw=>{
@@ -515,7 +518,11 @@ function createRestraintEntry(fields) {
 // Numeric source fields are independent of classification. The opt-in
 // prefers direct physical fields over legacy NODE*; absent direct evidence
 // retains the selected Step 7 profile. Conflicting physical aliases fail.
-export function preferredStagedScalar(attrs,config,field) {
+export function preferredStagedScalar(attrs,config,field,kind='') {
+  if(restraintPrecedence(config)&&kind){
+    const selected=selectRestraintScalar(attrs,config,field,kind);
+    return String(selected.value);
+  }
   if(config.xml229SourceFieldPrecedence?.[field]!==true)return '';
   const aliases=field==='stiffness'?['STIFFNESS','NODESTIFFNESS','CMPSUPSTIFF']:['FRICTION','CMPSUPFRICTION'];
   const values=aliases.map(k=>toText(attrs?.[k]).trim()).filter(Boolean);
@@ -534,8 +541,8 @@ export function restraintEntriesFromSupportKind(kind, attrs = {}, nodeElement = 
   const values = normalizeXmlTypes(profile.xmlTypes || config.supportKindToXmlType?.[upperKind] || []);
   const direction = resolveSupportDirectionCosines({ profile, attrs, nodeElement });
   const sourceGap = sourceSupportGap(attrs,config,upperKind);
-  const preferredStiffness=preferredStagedScalar(attrs,config,'stiffness');
-  const preferredFriction=preferredStagedScalar(attrs,config,'friction');
+  const preferredStiffness=preferredStagedScalar(attrs,config,'stiffness',upperKind);
+  const preferredFriction=preferredStagedScalar(attrs,config,'friction',upperKind);
   const gap = sourceGap.gap;
   return values.map(normalizeXmlType).filter(Boolean).map((type) => createRestraintEntry({
     type,

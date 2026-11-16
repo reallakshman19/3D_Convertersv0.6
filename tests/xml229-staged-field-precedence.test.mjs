@@ -194,7 +194,7 @@ test('JSON Trace mapped-code checkbox alone resolves verified type conflicts and
  }
  await assert.rejects(stage(source,{...config,xml229PhysicalVertexPrefinal:true}),{code:'PREFINAL_RESTRAINT_CONFIG_INVALID'});
 });
-test('real JSON Trace checkbox writes the shared support config and persists its authority',async()=>{
+test('real two-column JSON Trace authority panel persists defaults, edits and reset',async()=>{
  const {createRequire}=await import('node:module');
  const require=createRequire(import.meta.url);
  const {installMiniDom,MiniElement}=require('./helpers/mini-dom.js');
@@ -208,18 +208,23 @@ test('real JSON Trace checkbox writes the shared support config and persists its
    const ref={current:createXmlCiiAdaptedWorkflowState()};
    let renders=0;const panel=new MiniElement('section');
    renderMappedCodePrecedence(panel,ref,()=>renders++);
-   const checkbox=panel.querySelector('[data-field="xml229-source-field-precedence-mapped-codes"]');
-   assert.ok(checkbox);assert.equal(checkbox.checked,true);
-   checkbox.checked=true;checkbox.dispatch('change');
-   assert.equal(JSON.parse(ref.current.supportConfigJson).xml229SourceFieldPrecedence.mappedCodes,true);
-   assert.equal(JSON.parse(store.get('xml-cii-import-masters-v1')).config.xml229SourceFieldPrecedence.mappedCodes,true);
+   const field=(p,k='primary')=>'[data-field="xml229-source-field-precedence-'+p+'-'+k+'"]';
+   assert.equal(panel.querySelector(field('nodeType')).value,'supportMapper');
+   assert.equal(panel.querySelector(field('gap')).value,'json');
+   assert.equal(panel.querySelector(field('gap','fallback')).value,'supportMapper');
+   assert.equal(panel.querySelector(field('stiffness')).value,'supportMapper');
+   assert.equal(panel.querySelector(field('friction')).value,'json');
+   const select=panel.querySelector(field('nodeType'));
+   select.value='json';select.dispatch('change');
+   assert.equal(JSON.parse(ref.current.supportConfigJson).xml229RestraintPrecedence.nodeType.primary,'json');
+   assert.equal(JSON.parse(store.get('xml-cii-import-masters-v1')).config.xml229RestraintPrecedence.nodeType.primary,'json');
    assert.equal(renders,1);
-   checkbox.checked=false;checkbox.dispatch('change');
-   assert.equal(JSON.parse(ref.current.supportConfigJson).xml229SourceFieldPrecedence.mappedCodes,false);
-    const restored={current:createXmlCiiAdaptedWorkflowState()};
-    const restoredPanel=new MiniElement('section');
-    renderMappedCodePrecedence(restoredPanel,restored,()=>{});
-    assert.equal(restoredPanel.querySelector('[data-field="xml229-source-field-precedence-mapped-codes"]').checked,false);
+   const restored={current:createXmlCiiAdaptedWorkflowState()};
+   const restoredPanel=new MiniElement('section');
+   renderMappedCodePrecedence(restoredPanel,restored,()=>{});
+   assert.equal(restoredPanel.querySelector(field('nodeType')).value,'json');
+   restoredPanel.querySelector('[data-field="xml229-source-field-precedence-reset"]').dispatch('click');
+   assert.equal(JSON.parse(restored.current.supportConfigJson).xml229RestraintPrecedence.nodeType.primary,'supportMapper');
  }finally{
    globalThis.document=oldDoc;
    Object.defineProperty(globalThis,'localStorage',{configurable:true,value:oldStorage});
@@ -255,4 +260,59 @@ test('mapped codes default ON in V1, explicit OFF persists, V2 default remains u
  const {mappedCodePrecedenceEnabled}=await import('../converters/xml-cii2019-core/support-kind-precedence.js');
  assert.equal(mappedCodePrecedenceEnabled({xml229PhysicalVertexPrefinal:true}),false);
  assert.equal(mappedCodePrecedenceEnabled({xml229PhysicalVertexPrefinal:true,xml229SourceFieldPrecedence:{mappedCodes:true}}),true);
+});
+
+test('Step 3 field precedence: real exporter receipt, profile gap fallback, JSON friction, mapper stiffness and native parity',async()=>{
+ const {DEFAULT_RESTRAINT_PRECEDENCE}=await import('../converters/xml-cii2019-core/restraint-precedence-policy.js');
+ const config={...all,xml229RestraintPrecedence:DEFAULT_RESTRAINT_PRECEDENCE};
+ const source=regenerated(),guide=source[0].children[2].attributes,stop=source[0].children[1].attributes;
+ Object.assign(guide,{CMPSUPGAP:null,SUPPORT_GAP_SOURCE:'STEP7_KIND_PROFILE',SUPPORT_EFFECTIVE_GAP:'0',NODEFRICTION:'0',NODESTIFF:'999'});
+ Object.assign(stop,{SUPPORT_GAP_SOURCE:'CMPSUPGAP',SUPPORT_EFFECTIVE_GAP:'35',NODEFRICTION:'0.3',NODESTIFF:'999'});
+ const before=JSON.stringify(source);
+ const result=await stage(source,config,'preview');
+ assert.equal(result.restraintReview.status,'CLEAR');
+ assert.deepEqual(numericRows(rows(result.document)),[['+Y',0,123456,.3],['GUI',12,123456,0],['LIM',35,777,.3]]);
+ assert.deepEqual(numericRows(native(source,config)),numericRows(rows(result.document)));
+ assert.equal(JSON.stringify(source),before);
+ const g=result.proof.restraintAudit.records.find(x=>x.after?.Type==='GUI');
+ assert.equal(g.fields.find(x=>x.name==='Gap').evidence.authority,'support-profile/config');
+ const l=result.proof.restraintAudit.records.find(x=>x.after?.Type==='LIM');
+ assert.equal(l.fields.find(x=>x.name==='Friction').evidence.attribute,'NODEFRICTION');
+ const zero=regenerated();Object.assign(zero[0].children[2].attributes,{CMPSUPGAP:'GAP=0mm',SUPPORT_GAP_SOURCE:'CMPSUPGAP',SUPPORT_EFFECTIVE_GAP:'0',NODEFRICTION:'0.2'});
+ const z=await stage(zero,config,'preview');assert.equal(numericRows(rows(z.document)).find(r=>r[0]==='GUI')[1],0);
+ assert.deepEqual(numericRows(native(zero,config)),numericRows(rows(z.document)));
+ const jsonType={...config,xml229RestraintPrecedence:{...DEFAULT_RESTRAINT_PRECEDENCE,nodeType:{primary:'json',fallback:'review'}}};
+ assert.equal((await stage(source,jsonType,'preview')).restraintReview.status,'FOR_REVIEW');
+ assert.throws(()=>native(source,jsonType),/NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT/);
+ const reversed={...config,xml229RestraintPrecedence:{...DEFAULT_RESTRAINT_PRECEDENCE,gap:{primary:'supportMapper',fallback:'review'},stiffness:{primary:'json',fallback:'review'},friction:{primary:'supportMapper',fallback:'review'}}};
+ const rr=await stage(source,reversed,'preview');
+ assert.deepEqual(numericRows(native(source,reversed)),numericRows(rows(rr.document)));
+ assert.equal(numericRows(rows(rr.document)).find(r=>r[0]==='LIM')[2],999);
+ assert.equal(numericRows(rows(rr.document)).find(r=>r[0]==='LIM')[3],-1.0101);
+ const invalid=regenerated();invalid[0].children[2].attributes.CMPSUPGAP='garbage';
+ assert.equal((await stage(invalid,config,'preview')).restraintReview.status,'FOR_REVIEW');
+ assert.throws(()=>native(invalid,config),/NATIVE_PREFINAL_RESTRAINT_GAP_INVALID/);
+});
+
+test('Node Type priority and fallback are executable rather than display-only',async()=>{
+ const {DEFAULT_RESTRAINT_PRECEDENCE}=await import('../converters/xml-cii2019-core/restraint-precedence-policy.js');
+ const config={...all,xml229RestraintPrecedence:DEFAULT_RESTRAINT_PRECEDENCE};
+ const receipt=regenerated();
+ Object.assign(receipt[0].children[0].attributes,{SOURCE_NODETYPE:null,NODETYPE_CODES:['14'],NODETYPE_CLASSIFICATION_SOURCE:'STEP7_SUPPORT_MAPPING',SUPPORT_EFFECTIVE_NODETYPE:'14'});
+ const accepted=await stage(receipt,config,'preview');
+ assert.equal(accepted.restraintReview.status,'CLEAR');
+ assert.deepEqual(numericRows(native(receipt,config)),numericRows(rows(accepted.document)));
+ const missingRule=regenerated();
+ const rest=missingRule[0].children[0].attributes;
+ Object.assign(rest,{MDSSUPPFUNC:'UNKNOWN',MDSSUPPTYPE:'UNKNOWN',CMPSUPTYPE:'UNKNOWN'});
+ const held=await stage(missingRule,config,'preview');
+ assert.equal(held.restraintReview.status,'FOR_REVIEW');
+ assert.throws(()=>native(missingRule,config),/NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS/);
+ const fallback={...config,xml229RestraintPrecedence:{...DEFAULT_RESTRAINT_PRECEDENCE,nodeType:{primary:'supportMapper',fallback:'json'}}};
+ const resolved=await stage(missingRule,fallback,'preview');
+ assert.equal(resolved.restraintReview.status,'CLEAR');
+ assert.deepEqual(numericRows(native(missingRule,fallback)),numericRows(rows(resolved.document)));
+ const stale=regenerated();stale[0].children[2].attributes.NODETYPE_CODES=['9'];
+ assert.equal((await stage(stale,config,'preview')).restraintReview.status,'FOR_REVIEW');
+ assert.throws(()=>native(stale,config),/NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS/);
 });

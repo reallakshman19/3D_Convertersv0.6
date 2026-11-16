@@ -12,6 +12,7 @@ import {materializeXml229PhysicalVertexRestraints} from './xml229-physical-verte
 import {recordXml229AttachmentDelegation} from './xml229-source-attachment-policy.mjs';
 import {migrateSupportMappingConfig} from '../../../converters/xml-cii2019-core/support-mapping-config.js';
 
+import {restraintPrecedence} from '../../../converters/xml-cii2019-core/restraint-precedence-policy.js';
 import {mappedCodePrecedenceEnabled} from '../../../converters/xml-cii2019-core/support-kind-precedence.js';
 
 const local=n=>String(n?.localName||n?.nodeName||'').replace(/^.*:/,'');
@@ -46,7 +47,7 @@ function physicalAudit(vertex,before,document,config){
 export async function prepareXml229PrefinalRestraints({
  xmlText,stagedJsonText='',config={},policy='final',
 }){
-  if(config.xml229PhysicalVertexPrefinal===true&&Object.values(config.xml229SourceFieldPrecedence||{}).some(v=>v===true))
+  if(config.xml229PhysicalVertexPrefinal===true&&(restraintPrecedence(config)||Object.values(config.xml229SourceFieldPrecedence||{}).some(v=>v===true)))
     throw Object.assign(new Error('Source-field precedence is not qualified for physical-vertex V2'),{code:'PREFINAL_RESTRAINT_CONFIG_INVALID'});
   if(!['final','preview'].includes(policy))
     throw Object.assign(new Error('Unknown restraint pre-Final policy'),
@@ -83,10 +84,11 @@ export async function prepareXml229PrefinalRestraints({
   const decisions=(restraintAudit.evaluations||[]).filter(row=>
     row.source?.decision?.source==='explicit-staged-field-precedence');
   const policySummary=Object.freeze({
+    precedence:restraintPrecedence(config),
     flags:Object.fromEntries(['type','gap','stiffness','friction','mappedCodes'].map(key=>[key,key==='mappedCodes'?mappedCodePrecedenceEnabled(config):config.xml229SourceFieldPrecedence?.[key]===true])),
     savedGaps:Object.fromEntries(['REST','GUIDE','LINESTOP'].map(kind=>[kind,config.supportMapping?.kindProfiles?.[kind]?.gap??null])),
     typeDecisionOccurrences:decisions.length,
-    mappedCodeDecisionOccurrences:decisions.filter(row=>row.source.decision.rule?.policy==='xml229SourceFieldPrecedence.mappedCodes').length,
+    mappedCodeDecisionOccurrences:decisions.filter(row=>row.source.decision.rule?.policy==='xml229SourceFieldPrecedence.mappedCodes'||(row.source.decision.rule?.policy==='xml229RestraintPrecedence.nodeType'&&Array.isArray(row.source.decision.rule?.mappedCodes))).length,
     uniqueTypeDecisionMembers:new Set(decisions.map(row=>row.source.path).filter(Boolean)).size,
     warningReasons:Object.freeze(warnings.reduce((out,row)=>{const key=row.resolutionReason||row.code;out[key]=(out[key]||0)+1;return out;},{})),
     authority:'CURRENT_STEP7_CONFIG',

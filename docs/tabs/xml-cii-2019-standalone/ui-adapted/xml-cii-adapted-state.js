@@ -1,6 +1,7 @@
 /** Owns isolated XML→CII Standalone state, persistence, and effective config.
  * Parameters are explicit state/config values; outputs are copied state data. */
 
+import {withDefaultRestraintPrecedence} from '../../../converters/xml-cii2019-core/restraint-precedence-policy.js';
 import { defaultXmlCii2019SupportConfigJson } from '../xml-cii-standalone-default-config.js';
 import { createDefaultRegexTesterConfig } from '../xml-cii-regex-tester.js';
 import { createDefaultResolverJsonTraceConfig } from '../xml-cii-resolver-json-trace.js';
@@ -19,7 +20,7 @@ const SUPPORT_MAPPER_DEFAULTS = Object.freeze([
 
 function withStandaloneMaterialCodeDefaults(config) {
   const source = config && typeof config === 'object' && !Array.isArray(config) ? config : {};
-  return { ...source, useDefaultPipingClassMaterialCodeMap: source.useDefaultPipingClassMaterialCodeMap !== false };
+  return withDefaultRestraintPrecedence({ ...source, useDefaultPipingClassMaterialCodeMap: source.useDefaultPipingClassMaterialCodeMap !== false });
 }
 
 export function createDefaultWorkflowOptions() {
@@ -328,6 +329,7 @@ export function updateWorkflowState(state, patch = {}) {
   const next = { ...state, ...patch, activePhaseId: patch.activePhaseId ? normalizeAdaptedWorkflowPhaseId(patch.activePhaseId) : state.activePhaseId };
   const configChanged = Object.prototype.hasOwnProperty.call(patch, 'supportConfigJson');
   const parsedConfig = configChanged ? parseSupportConfigForState(next.supportConfigJson) : null;
+  if(configChanged&&parsedConfig)next.supportConfigJson=JSON.stringify(parsedConfig,null,2);
   if (configChanged && next.masterContext) next.masterContext = synchronizedMasterContext(next.masterContext, parsedConfig);
   const revisionConfig = parsedConfig || next.masterContext?.config || state.masterContext?.config || {};
   const dependency = advanceDependencyRevisionState(state, next, revisionConfig);

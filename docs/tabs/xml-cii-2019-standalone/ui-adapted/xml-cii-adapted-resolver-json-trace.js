@@ -1,4 +1,4 @@
-import {mappedCodePrecedenceEnabled} from '../../../converters/xml-cii2019-core/support-kind-precedence.js';
+import {restraintPrecedence,DEFAULT_RESTRAINT_PRECEDENCE} from '../../../converters/xml-cii2019-core/restraint-precedence-policy.js';
 import { createElement, appendLabeledControl } from './xml-cii-adapted-dom.js';
 import { saveMasterContextToLocalStorage,updateWorkflowState } from './xml-cii-adapted-state.js?v=20261001-weight-output-2';
 import { recordPreviewRestraintReview,recordPreviewFailure } from './xml-cii-adapted-preview-failure-notice.js';
@@ -369,30 +369,51 @@ function renderResolverIndex(parent, state, stateRef, render, scopeState) {
 }
 
 export function renderMappedCodePrecedence(parent,stateRef,render){
-  const state=stateRef.current;
-  let config;
-  try{config=JSON.parse(state.supportConfigJson||'{}');}catch{return;}
+  let config,policy;
+  try{config=JSON.parse(stateRef.current.supportConfigJson||'{}');policy=restraintPrecedence(config)||DEFAULT_RESTRAINT_PRECEDENCE;}catch{return;}
   const section=createElement('section','','xml-cii-resolver-panel');
-  section.appendChild(createElement('h3','Mapped restraint code precedence'));
-  const input=appendLabeledControl(section,
-    'In case of conflict, NODETYPE_CODES wins over SOURCE_CODES (original SOURCE_NODETYPE).',createElement('input'));
-  input.type='checkbox';input.checked=mappedCodePrecedenceEnabled(config);
-  input.dataset.field='xml229-source-field-precedence-mapped-codes';
-  input.disabled=config.xml229PhysicalVertexPrefinal===true;
-  section.appendChild(createElement('p',
-    'Default ON for standard V1; explicitly unchecking preserves OFF. Unavailable in physical-vertex V2. Applies to original staged members with a single verified Step 7 mapped code (8 GUIDE, 9 LINESTOP, 14 REST). Original source codes stay in the audit. Current enabled Step 7 rules and the exported NODETYPE must agree; invalid or composite codes remain for review. This is independent of the Step 7 Type checkbox. Gapless supports still require the Gap precedence checkbox and an appropriate saved profile gap. Rebuild O1 and Preview after changing this setting.','xml-cii-phase-help'));
-  input.addEventListener('change',()=>{
+  const heading=createElement('h3','Mapped restraint code precedence ');
+  const info=createElement('button','(i)');
+  info.type='button';info.title='Defaults: Node Type = Support Mapper; Gap = JSON, fallback to Support Mapper if NULL or unavailable (explicit zero is valid); Stiffness = Support Mapper; Friction = JSON, fallback to Support Mapper if zero, NULL or unavailable. Missing Node Type or Stiffness defaults to Engineering Review. Invalid or contradictory evidence is held. Original source values remain unchanged.';
+  info.setAttribute('aria-label','Default restraint authority rules');
+  heading.appendChild(info);section.appendChild(heading);
+  const disabled=config.xml229PhysicalVertexPrefinal===true;
+  const grid=createElement('div');grid.style.display='grid';grid.style.gridTemplateColumns='repeat(2,minmax(0,1fr))';grid.style.gap='12px';
+  const labels={nodeType:'Node Type',gap:'Gap',stiffness:'Stiffness',friction:'Friction'};
+  const sources={supportMapper:'Support Mapper',json:'JSON',review:'Engineering Review'};
+  const save=(nextPolicy)=>{
+    if(disabled)return;
     const current=stateRef.current;
-    let next;
-    try{next=JSON.parse(current.supportConfigJson||'{}');}catch{return;}
-    if(next.xml229PhysicalVertexPrefinal===true)return;
-    next={...next,xml229SourceFieldPrecedence:{...(next.xml229SourceFieldPrecedence||{}),mappedCodes:input.checked}};
+    let next;try{next=JSON.parse(current.supportConfigJson||'{}');}catch{return;}
+    next={...next,xml229RestraintPrecedence:nextPolicy};
     const masterContext=current.masterContext?{...current.masterContext,config:next}:current.masterContext;
     stateRef.current=updateWorkflowState(current,{supportConfigJson:JSON.stringify(next,null,2),masterContext});
     if(stateRef.current.masterContext)saveMasterContextToLocalStorage(stateRef.current.masterContext);
     recordPreviewRestraintReview(null);recordPreviewFailure(null);
     if(typeof render==='function')render();
-  });
+  };
+  for(const [field,p] of Object.entries(policy)){
+    const panel=createElement('section','','xml-cii-resolver-panel');
+    panel.appendChild(createElement('h4',labels[field]));
+    for(const prop of ['primary','fallback']){
+      const select=appendLabeledControl(panel,prop==='primary'?'Priority':'Fallback',createElement('select'));
+      const options=prop==='primary'?['supportMapper','json']:['supportMapper','json','review'].filter(v=>v!==p.primary);
+      for(const value of options){const option=createElement('option',sources[value]);option.value=value;select.appendChild(option);}
+      select.value=p[prop];select.disabled=disabled;select.dataset.field='xml229-source-field-precedence-'+field+'-'+prop;
+      select.addEventListener('change',()=>{
+        const next={...policy,[field]:{...p,[prop]:select.value}};
+        if(next[field].primary===next[field].fallback)next[field].fallback='review';
+        save(next);
+      });
+    }
+    panel.appendChild(createElement('p',field==='gap'?'NULL / missing falls back; explicit zero is valid.':field==='friction'?'Zero / NULL / missing falls back.':field==='nodeType'?'Generic classification; mapped codes are verified.':'Generic stiffness profile.','xml-cii-phase-help'));
+    grid.appendChild(panel);
+  }
+  section.appendChild(grid);
+  const reset=createElement('button','Reset to Defaults');reset.type='button';reset.disabled=disabled;
+  reset.dataset.field='xml229-source-field-precedence-reset';
+  reset.addEventListener('click',()=>save(DEFAULT_RESTRAINT_PRECEDENCE));section.appendChild(reset);
+  section.appendChild(createElement('p',disabled?'Unavailable in physical-vertex V2.':'Changes save immediately. Rebuild O1 and Preview. Step 7 owns the support profiles; these controls own authority.','xml-cii-phase-help'));
   parent.appendChild(section);
 }
 
