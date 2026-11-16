@@ -452,7 +452,7 @@ export function resolveWallThicknessFromPipingClass({
 
 export function resolveBranchProcessData({
   branchName, lineKey, lineRow, boreMm, componentType, schedule, href, tref,
-  materialMap, pipingClassIndex, overrides = {}, xmlNode, xmlBranch, config = {}, branchIdentity = null,
+  materialMap, pipingClassIndex, overrides = {}, xmlNode, xmlBranch, config = {}, branchIdentity = null, pipingClassSelection = null,
 }) {
   // A configured multi-format mismatch cannot acquire material/class authority through legacy scanning.
   if (branchIdentity && branchIdentity.status !== 'MATCHED') {
@@ -468,11 +468,18 @@ export function resolveBranchProcessData({
     };
   }
   const lineListPipingClass = readAny(lineRow, ['pipingClass', 'Piping Class', 'PIPING_CLASS']);
-  const classSource = branchIdentity
+  const classSource = pipingClassSelection?.requestedPipingClass
+    ? {requestedPipingClass:pipingClassSelection.requestedPipingClass,branchPipingClass:pipingClassSelection.regex,lineListPipingClass:pipingClassSelection.lineList,source:pipingClassSelection.source}
+    : branchIdentity
     ? { requestedPipingClass: branchIdentity.pipingClass, branchPipingClass: branchIdentity.pipingClass,
         lineListPipingClass, source: 'configured-branch-format' }
     : selectXmlCiiRequestedPipingClass({ branchName, lineListPipingClass, config });
   const requestedPipingClass = classSource.requestedPipingClass;
+  // Never replace a selected exact source class with an approximate master class.
+  const classResolverConfig = pipingClassSelection?.pinned
+    ? {...config,pipingClassMatch:{...(config.pipingClassMatch||{}),minAcceptScore:1000,classExactScore:1000}}
+    : config;
+  const classOverrides=pipingClassSelection?.pinned?{...overrides,pipingClass:{},pipingClassApprox:{},approxPipingClass:{}}:overrides;
   const classMatch = findBestPipingClassRow({
     pipingClass: requestedPipingClass,
     boreMm,
@@ -480,8 +487,8 @@ export function resolveBranchProcessData({
     rating: '',
     schedule,
     pipingClassIndex,
-    overrides,
-    config,
+    overrides:classOverrides,
+    config:classResolverConfig,
   });
   const pipingClassRow = classMatch?.row || null;
   const resolvedPipingClass = classMatch?.resolvedPipingClass
@@ -518,11 +525,11 @@ export function resolveBranchProcessData({
     componentType,
     rating: ratingAuthority.rating,
     pipingClassIndex,
-    overrides,
+    overrides:classOverrides,
     overrideKeys,
     xmlNode,
     xmlBranch,
-    config,
+    config:classResolverConfig,
   });
   const wall = resolveWallThicknessFromPipingClass({
     pipingClassRow, overrides, overrideKeys, xmlNode, xmlBranch, config,
