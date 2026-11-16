@@ -40,8 +40,14 @@ function physicalAudit(vertex,before,document,config){
   }
   return collectRestraintAudit(before,document,notes,[],config);
 }
-export async function prepareXml229PrefinalRestraints({xmlText,stagedJsonText='',config={},purpose='final'}){
-  if(!['preview','final'].includes(purpose))throw Object.assign(new Error('Invalid restraint execution purpose'),{code:'PREFINAL_RESTRAINT_CONFIG_INVALID'});
+// Final and native replay remain strict. Only the explicitly identified
+// nonreleasing Preview policy may quarantine conflicting source members.
+export async function prepareXml229PrefinalRestraints({
+ xmlText,stagedJsonText='',config={},policy='final',
+}){
+  if(!['final','preview'].includes(policy))
+    throw Object.assign(new Error('Unknown restraint pre-Final policy'),
+      {code:'PREFINAL_RESTRAINT_POLICY_INVALID'});
   const original=parse(xmlText);
   const before=inventoryRestraintAudit(original);
   const originalShape=JSON.stringify(sourceShape(original));
@@ -49,29 +55,21 @@ export async function prepareXml229PrefinalRestraints({xmlText,stagedJsonText=''
     migrateSupportMappingConfig(config).useJsonForRestraints!==false;
   const vertex=enabled?materializeXml229PhysicalVertexRestraints({
     originalXmlText:xmlText,stagedJsonText,config,document:original}):null;
-  let resolved=null;
-  if(!enabled){
-    // Clean inputs retain exactly the strict geometry and audit.
-    try{resolved=closeGovernedMdsPositionRestraintsXml(
-      xmlText,stagedJsonText,config,{requireUnambiguous:true});}
-    catch(error){
-      if(purpose!=='preview'||!isQuarantinableXml229RestraintError(error))throw error;
-      resolved=closeGovernedMdsPositionRestraintsXml(xmlText,stagedJsonText,config,
-        {requireUnambiguous:true,conflictPolicy:'quarantine'});
-      if(!resolved.warnings?.length)throw error;
-    }
-  }
+  const resolved=enabled?null:closeGovernedMdsPositionRestraintsXml(
+    xmlText,stagedJsonText,config,{requireUnambiguous:true,
+      ...(policy==='preview'?{conflictPolicy:'quarantine'}:{})});
   const document=vertex?.document||(resolved.changed?parse(resolved.xmlText):original);
   const captured=enabled?physicalAudit(vertex,before,document,config):resolved.restraintAudit;
-  const warnings=resolved?.warnings||[];
+  const warnings=policy==='preview' ? [...(resolved?.warnings||[])] : [];
   const skipNodes=new Set(vertex?.skipDefaultAtta||[]);
-  // Do not replace a quarantined ATTA with an inferred default REST.
-  const warnedIndexes=new Set(warnings.map(w=>w.xmlIndex));
-  let xmlIndex=0;
-  for(const branch of [...document.getElementsByTagName('Branch')])
-    for(const node of elements(branch).filter(n=>local(n)==='Node')){
-      if(warnedIndexes.has(++xmlIndex))skipNodes.add(node);
-    }
+  // An unresolved member is not permission to synthesize a new restraint at
+  // its XML node via the generic ATTA fallback. Preserve any original +Y.
+  if(warnings.length){
+    const skipped=new Set(warnings.map(w=>w.xmlIndex).filter(Number.isSafeInteger));
+    [...document.getElementsByTagName('Node')].forEach((node,i)=>{
+      if(skipped.has(i+1))skipNodes.add(node);
+    });
+  }
   const fallback=closeGovernedAttaDefaultRestraints(document,config,{skipNodes});
   if(originalShape!==JSON.stringify(sourceShape(document)))
     throw Object.assign(new Error('Support staging changed unrelated source fields'),
@@ -79,8 +77,15 @@ export async function prepareXml229PrefinalRestraints({xmlText,stagedJsonText=''
   const restraintAudit=await bindRestraintAudit(
     recordXml229AttachmentDelegation(completeRestraintAudit(captured,before,document,config),vertex,document),
     {xmlText,stagedJsonText,config,preparedXmlText:new XMLSerializer().serializeToString(document)});
-  const restraintReview=Object.freeze({status:warnings.length?'HOLD':'NOT_ASSESSED',warnings});
-  return {document,restraintReview,proof:Object.freeze({schema:enabled?'XML229.PrefinalRestraints.v2':'XML229.PrefinalRestraints.v1',
+  const restraintReview=Object.freeze({
+    schema:'XML229.PreviewRestraintReview.v1',
+    status:warnings.length?'FOR_REVIEW':'CLEAR',
+    engineeringRestraintAcceptance:warnings.length?'HOLD':'NOT_ASSESSED',
+    quarantinedXmlNodeCount:new Set(warnings.map(w=>w.xmlIndex)).size,
+    warnings:Object.freeze(warnings),
+  });
+  return {document,restraintReview,
+    proof:Object.freeze({schema:enabled?'XML229.PrefinalRestraints.v2':'XML229.PrefinalRestraints.v1',
     originalJsonSha256:await digestUtf8(stagedJsonText),restraintAudit,
     ...(warnings.length?{engineeringRestraintAcceptance:'HOLD'}:{}),
     ...(enabled?{physicalVertexMemberCensus:vertex.proofSummary}:{})}),

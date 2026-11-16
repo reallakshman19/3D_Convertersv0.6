@@ -101,7 +101,8 @@ export async function openXml229EngineeringFactModel({
  // master/config buffers whose full content is attested by GC-PW.
  const workConfig=isolatedOriginalPreviewWorkConfig(live.config||{});
  const restraintStage=await prepareXml229PrefinalRestraints({
-   xmlText,stagedJsonText:live.stagedSource||'',config:workConfig,purpose:'preview',
+   xmlText,stagedJsonText:live.stagedSource||'',config:workConfig,
+   policy:'preview',
  });
  const prepared=preparePreviewNodeOccurrenceDocument({
    xmlText,sourceDocument:restraintStage.document,config:workConfig,
@@ -305,13 +306,17 @@ export async function openXml229EngineeringFactModel({
       verifiedPhysicalOwnerCount:physical.length,
       verifiedPhysicalFactCount:physical.length*XML229_ENGINEERING_FIELDS.length,
     },
+    // Physical Weight facts can be verified while restraint classifications
+    // remain independently held for engineering review.
+    engineeringAcceptance:'VERIFIED',
+    engineeringRestraintAcceptance:restraintStage.restraintReview.engineeringRestraintAcceptance,
     restraintReview:restraintStage.restraintReview,
-    engineeringAcceptance:restraintStage.restraintReview.status==='HOLD'?'HOLD':'VERIFIED',
-    fullFactPopulationAccepted:restraintStage.restraintReview.status!=='HOLD',
+    fullFactPopulationAccepted:true,
     engineeringFactSnapshotId:model.info.snapshotId,
     engineeringFactCount:records.length,
   });
   return Object.freeze({model,workerResult,finalizedGeometry,
+    restraintReview:restraintStage.restraintReview,
     sourceOccurrenceCensus:sourceOriginals,
     workerOriginalCount:sourceOriginals.length,
     originalOccurrences:projection.nodes.map(({sourceId,branchOccurrenceIndex,nodeOrdinal})=>({

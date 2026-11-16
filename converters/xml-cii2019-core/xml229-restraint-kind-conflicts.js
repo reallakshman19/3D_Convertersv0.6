@@ -22,7 +22,11 @@ export function identifyXml229MdsKindConflict(attrs = {}, config = {}) {
   if (!physicalKind || !new RegExp('^' + functionCode + '[0-9]+$').test(mdsType) ||
       !(functionCode === 'ST' ? /^LS-[A-Z0-9-]+$/.test(catalogue)
         : /^PG-[A-Z0-9-]+$/.test(catalogue))) return null;
-  const typedKind = nodeTypeSupportKind(attrs, config);
+  // ATT/RVM Step 7 exports may add a proposed NODETYPE. If the original
+  // NODETYPE was retained separately, it still owns engineering classification.
+  const rawNodeType=Object.prototype.hasOwnProperty.call(attrs,'SOURCE_NODETYPE')
+    ?text(attrs.SOURCE_NODETYPE):text(attrs.NODETYPE);
+  const typedKind = nodeTypeSupportKind({...attrs,NODETYPE:rawNodeType}, config);
   if (!typedKind || typedKind === physicalKind) return null;
   return {
     code: 'PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT',
@@ -30,7 +34,7 @@ export function identifyXml229MdsKindConflict(attrs = {}, config = {}) {
     candidateKind: physicalKind,
     sourceName: text(attrs.NAME),
     fields: {
-      NAME: text(attrs.NAME), NODETYPE: text(attrs.NODETYPE),
+      NAME: text(attrs.NAME), NODETYPE: rawNodeType,
       MDSSUPPFUNC: text(attrs.MDSSUPPFUNC),
       MDSSUPPTYPE: text(attrs.MDSSUPPTYPE),
       CMPSUPTYPE: text(attrs.CMPSUPTYPE),

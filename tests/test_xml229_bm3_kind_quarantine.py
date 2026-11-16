@@ -69,6 +69,16 @@ class BM3ClassificationTests(unittest.TestCase):
 
 
 
+    def test_att_proposal_never_overrides_original_source_nodetype(self):
+        proposed_st={**ST['attrs'],'SOURCE_NODETYPE':'14','NODETYPE':'9'}
+        proposed_gt={**GT['attrs'],'SOURCE_NODETYPE':'14','NODETYPE':'8'}
+        self.assertEqual(mds_kind_conflict(proposed_st,CONFIG)['sourceKind'],'REST')
+        self.assertEqual(mds_kind_conflict(proposed_gt,CONFIG)['sourceKind'],'REST')
+        proposed=[REST,AT,{'attrs':proposed_st,'desc':'','type':'SUPPORT'},
+                  {'attrs':proposed_gt,'desc':'','type':'SUPPORT'}]
+        with self.assertRaisesRegex(ValueError,'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT'):
+            kinds(proposed,require,CONFIG)
+
     def test_gapless_st501_is_rejected_even_with_review_kind_receipt(self):
         gapless={**ST,'attrs':{**ST['attrs'],'CMPSUPGAP':''}}
         source=[REST,AT,gapless,GT]

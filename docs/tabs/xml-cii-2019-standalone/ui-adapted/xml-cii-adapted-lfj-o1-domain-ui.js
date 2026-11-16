@@ -4,7 +4,7 @@
  * provenance are re-attested before allowing user trace/CSV interaction.
  * No output is engineeringReady or Preview/Weight-approved.
  */
-import { showRestraintReview } from './xml-cii-adapted-preview-failure-notice.js';
+import { showPreviewRestraintStatus,showRestraintReview } from './xml-cii-adapted-preview-failure-notice.js';
 const SCHEMA='LFJ.O1.DomainWorker.v1';
 const currentDomains=new WeakMap();
 const HEADERS={
@@ -114,6 +114,9 @@ function paint(session){
       'Not approved engineering output, Preview or Weight.'
     : 'Awaiting an independently committed source index and original XML.';
   panel.append(info);
+  // O1 preserves independent source-path rights while showing Preview HOLD.
+  // Review warnings must not present as an O1 failure or unblock native Final.
+  showPreviewRestraintStatus(panel);
   if(!d.ready)return;
   showRestraintReview(panel,d.restraintReview);
   const tools=document.createElement('div');

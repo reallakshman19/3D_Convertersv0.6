@@ -56,7 +56,7 @@ async function run(m){
    const effective={...config,resolverJsonTrace:{...(config.resolverJsonTrace||{}),...resolver},
      dtxrPositionOffset:resolver.dtxrPositionOffset||config.dtxrPositionOffset};
    const stage=await prepareXml229PrefinalRestraints({xmlText:m.sourceText,
-     stagedJsonText:json,config:effective,purpose:'preview'});
+     stagedJsonText:json,config:effective,policy:'preview'});
    restraintReview=stage.restraintReview;
  } catch(error) {
    restraintReview={status:'REVIEW_BLOCKED',warnings:[],
