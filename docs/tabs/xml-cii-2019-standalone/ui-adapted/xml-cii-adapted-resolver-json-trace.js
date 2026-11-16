@@ -311,15 +311,18 @@ function renderResolverIndex(parent, state, stateRef, render, scopeState) {
     Object.assign(buildBtn.style, { background: '#7f1d1d', border: '1px solid #ef4444', color: '#fecaca', fontWeight: '700' });
     buildBtn.title = 'Resolver index has not been built yet — click to build.';
   }
-  actions.append(buildBtn, actionButton('save-resolver-json-config', 'Save to config'), createElement('span', state.resolverJsonTraceWriteBackStatus || 'Resolver config not saved yet.', 'xml-cii-phase-help'));
+  const writeStatus=createElement('span', state.resolverJsonTraceWriteBackStatus || 'Resolver config not saved yet.', 'xml-cii-phase-help');
+  writeStatus.dataset.resolverWritebackStatus='true';
+  actions.append(buildBtn, actionButton('save-resolver-json-config', 'Save to config'), writeStatus);
   section.appendChild(actions);
   renderDelimiterControls(section, state);
   const sidecar = createElement('div', '', 'xml-cii-resolver-actions');
   sidecar.append(actionButton('download-json-trace-sidecar', 'Download staged JSON trace CSV',
-    !state.jsonTraceSidecarCsv));
-  sidecar.append(createElement('span', state.jsonTraceSidecarStatus ||
-    'Build / refresh resolver index to generate a CSV sidecar from staged JSON.',
-    'xml-cii-phase-help'));
+    !state.jsonTraceSidecarCsv&&!state.jsonTraceSidecarWorkerReady));
+  const sidecarStatus=createElement('span', state.jsonTraceSidecarStatus ||
+    'Build / refresh resolver index to generate a CSV sidecar from staged JSON.','xml-cii-phase-help');
+  sidecarStatus.dataset.resolverSidecarStatus='true';
+  sidecar.append(sidecarStatus);
   section.appendChild(sidecar);
 
   const metrics = createElement('div', '', 'xml-cii-resolver-metrics');

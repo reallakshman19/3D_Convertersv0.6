@@ -66,6 +66,12 @@ function configFrom(input = {}) {
   };
 }
 
+// Save trace settings without reading original JSON on the foreground thread.
+export function saveStandaloneResolverJsonTraceConfig(supportConfigJson,jsonConfig){
+  const parsed=JSON.parse(String(supportConfigJson||'{}'));
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw new Error('Invalid standalone support config');
+  return writeSupportConfig(supportConfigJson,configFrom({supportConfigJson,jsonConfig}));
+}
 function writeSupportConfig(supportConfigJson, jsonConfig) {
   const config = parseSupportConfig(supportConfigJson);
   const { sourceSchema, coordinateAlignment, ...traceConfig } = jsonConfig;

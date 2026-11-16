@@ -66,7 +66,7 @@ export const XML229_ENGINEERING_FIELDS=Object.freeze([
  */
 export async function openXml229EngineeringFactModel({
   basis,live,xmlText,sourceId,previewResult,
-  expectedOriginalCount,maxPhysical=10000,
+  expectedOriginalCount,maxPhysical=10000,onProgress=()=>{},
 }={}){
   if(!good(sourceId)||typeof xmlText!=='string'||!xmlText.trim()||
     !basis||!live||!previewResult||typeof previewResult!=='object')
@@ -100,10 +100,12 @@ export async function openXml229EngineeringFactModel({
   // Independent source-cleanup calculation cannot mutate the original
  // master/config buffers whose full content is attested by GC-PW.
  const workConfig=isolatedOriginalPreviewWorkConfig(live.config||{});
+ onProgress('physical-field-prefinal-restraint-replay');
  const restraintStage=await prepareXml229PrefinalRestraints({
    xmlText,stagedJsonText:live.stagedSource||'',config:workConfig,
    policy:'preview',
  });
+ onProgress('physical-field-source-cleanup');
  const prepared=preparePreviewNodeOccurrenceDocument({
    xmlText,sourceDocument:restraintStage.document,config:workConfig,
  });
