@@ -9,6 +9,7 @@ import { readTextFile } from '../xml-cii-workflow-ui-adapter.js?v=20261113-x4-1'
 import { downloadTextFile } from './xml-cii-adapted-dom.js';
 import { applyPreviewDiagnosticsAuditReport, applyStandaloneManualElementSideloadResult, applyStandaloneOutputRunReadiness, applyStandaloneRegexTesterResult, applyStandaloneResolverJsonTraceResult, applyStandaloneSupportTypeMapperResult, applyStandaloneWeightMatchResult, clearWorkflowResult, patchResolverJsonTraceConfig, resetWorkflowState, updateManualElementSideloadConfig, updateRegexTesterConfig, updateResolverJsonTraceConfig, updateSupportTypeMapperConfig, updateSupportTypeMapperTestInput, updateWeightMatchOverrides, updateWorkflowOptions, updateWorkflowState } from './xml-cii-adapted-state.js?v=20261001-weight-output-2';
 import { detectXmlCiiWorkflowSourceKind, maskedFileName } from '../xml-cii-workflow-source-detect.js';
+import { normalizePsStripSuffixes } from '../xml-cii-resolver-match-policy.js';
 import { bindImportMastersEvents, clearMasterContextFromUi, loadImportMastersFromUi } from './xml-cii-adapted-master-events.js?v=20261006-c05-5-5-persistence-retry-1';
 import { runWorkflowFromUi } from './xml-cii-adapted-run-workflow.js?v=20261113-x5a-2';
 import { bindTraceTableEvents } from './xml-cii-adapted-table-trace-events.js?v=20261001-weight-output-2';
@@ -160,6 +161,23 @@ export function bindResolverEvents(container, stateRef, render) {
   });
   onChange(container, 'resolver-join-mode', (value) => {
     stateRef.current = patchResolverJsonTraceConfig(stateRef.current, { joinMode: value || 'unique' });
+    render();
+  });
+  onChange(container, 'resolver-match-mode', (value) => {
+    const mode = String(value || '').toUpperCase();
+    if (!['POS', 'PS', 'ROOT'].includes(mode)) return;
+    stateRef.current = patchResolverJsonTraceConfig(stateRef.current, { matchMode: mode });
+    render();
+  });
+  onChange(container, 'resolver-ps-suffixes', (value) => {
+    try {
+      const suffixes = normalizePsStripSuffixes(value);
+      stateRef.current = patchResolverJsonTraceConfig(stateRef.current,
+        { psFallback: { stripSuffixes: suffixes } });
+    } catch (error) {
+      stateRef.current = updateWorkflowState(stateRef.current,
+        { resolverJsonTraceWriteBackStatus: 'Invalid PS suffix configuration: ' + error.message });
+    }
     render();
   });
   onChange(container, 'resolver-coordinate-tolerance', (value) => {
