@@ -68,5 +68,15 @@ class BM3ClassificationTests(unittest.TestCase):
             kinds(SOURCE,require,bad)
 
 
+
+    def test_gapless_st501_is_rejected_even_with_review_kind_receipt(self):
+        gapless={**ST,'attrs':{**ST['attrs'],'CMPSUPGAP':''}}
+        source=[REST,AT,gapless,GT]
+        cfg={**CONFIG,'xml229RestraintKindOverrides':[
+            receipt(gapless,'LINESTOP'),receipt(GT,'GUIDE')]}
+        self.assertEqual(mds_kind_conflict(gapless['attrs'],CONFIG)['candidateKind'],'LINESTOP')
+        with self.assertRaisesRegex(ValueError,'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT'):
+            kinds(source,require,cfg)
+
 if __name__=='__main__':
     unittest.main()
