@@ -1,0 +1,15 @@
+schema: AgentPrStatus.v1
+repository: reallakshman19/3D_Convertersv0.6
+pr_or_wip: PR6
+mission: Restore confirmed XML229 browser CI runner compatibility after PR5
+branch: codex/pr5-ci-browser-recovery
+main_head_last_checked: fa54925905c42e2591ca42e5ddafe4ea1f2952aa
+work_intent: IMPLEMENT
+criticality: STANDARD
+current_stage: REBASED_SCOPE_CI_REPAIR_VERIFIED_PRODUCT_HOLD
+report_path: agents/PR6_workreport.md
+appendix_a_status: NOT_APPLICABLE_NO_PRODUCTION_MUTATION
+highest_risk: PR7 overlaps all workflow edits; PS-4131 classifier discrepancy and audit export unresolved
+exact_next_action: Coordinate PR1/4/7 and reproduce PS-4131 with actual saved Step 7 table and mapper ON; keep PR6 draft
+
+native_pr_state_authority: https://github.com/reallakshman19/3D_Convertersv0.6/pull/6

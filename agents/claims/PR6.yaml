@@ -1,0 +1,13 @@
+schema: AgentClaim.v1
+repository: reallakshman19/3D_Convertersv0.6
+pr_or_wip: PR6
+claim_state: COORDINATION_REQUIRED
+claim_modes: [CI_CONFIGURATION_ONLY]
+authority_domains: [XML229_BROWSER_CI_RUNNER]
+files:
+  exact: [.github/workflows/xml229-output-run-audit.yml, .github/workflows/xml229-postmerge-full-regression.yml, .github/workflows/xml229-published-pages-smoke.yml]
+protected: [PR5_DIAGNOSTICS, ENGINEERING_SEMANTICS, WRITER_RUNTIME, TOPOLOGY_GEOMETRY, SOURCE_INPUTS, V2_OFF, TEST_ORACLES, MERGE_OWNER_ONLY]
+coordination: PR7 overlaps all three workflow files; PR1 owns classifier and PR4/7 own audit changes; no merge or production changes authorized in PR6
+last_verified_head: fa54925905c42e2591ca42e5ddafe4ea1f2952aa
+
+native_pr_state_authority: https://github.com/reallakshman19/3D_Convertersv0.6/pull/6
