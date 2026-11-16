@@ -525,7 +525,8 @@ export function closeGovernedMdsPositionRestraintsXml(xmlText, stagedJsonText, c
         const candidates=restraintEntriesFromSupportKind(kind, attrs, node, config)
           .map(entry=>({
             ...entry,type:selectedType||entry.type,
-            gap:kind==='REST'&&explicitGap?String(supportGapNumber(attrs)):entry.gap,
+            gap:explicitGap?String(supportGapNumber(attrs)):
+              (kind==='REST'&&text(config.defaultGap)?String(config.defaultGap):entry.gap),
           }));
         note.selections.push({kind,types:candidates.map(entry=>normalizeXmlType(entry?.type||entry)),
           source:selected.get(kind)||null});
