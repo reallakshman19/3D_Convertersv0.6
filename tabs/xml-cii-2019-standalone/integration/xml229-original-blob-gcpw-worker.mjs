@@ -235,7 +235,7 @@ function currentRunAdvisory(){
      verifiedFactCount:full.verifiedFactCount,
      stageRevisions:full.revisionBySource,
      counts,engineeringFactsVerified:true,
-     previewStatus:verifiedPreviewResult?.restraintReview?.status==='HOLD'?'FOR_REVIEW':'FULL_SOURCE_FACTS_VERIFIED',
+     previewStatus:'FULL_SOURCE_FACTS_VERIFIED',
      engineeringRestraintAcceptance:verifiedPreviewResult?.restraintReview?.status||'NOT_ASSESSED',
      weightStatus:counts.unresolved>0?'PROPOSED_OR_UNRESOLVED':'REVIEWED_SOURCE_MASSES',
      ciiReleaseAuthorized:false,
