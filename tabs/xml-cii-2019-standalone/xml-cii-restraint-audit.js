@@ -11,13 +11,13 @@ const type = v => ({REST:'+Y', Y:'+Y', '14':'+Y', GUIDE:'GUI', '8':'GUI',
   LINESTOP:'LIM', LIMIT:'LIM', '9':'LIM'}[String(v).toUpperCase()] || String(v).toUpperCase());
 const text = v => v == null ? '' : String(v).trim();
 const clone = v => JSON.parse(JSON.stringify(v));
-const sourceFields = ['NAME','REF','TYPE','RAW_TYPE','NODESTIFF','MDSSUPPFUNC','CMPSTRESSN','ISONOTE','RTEXT', 'NODETYPE', 'NODEGAP', 'CMPSUPGAP', 'CMPSUPGAP_POS',
+const sourceFields = ['NAME','REF','TYPE','RAW_TYPE','NODESTIFF','SOURCE_NODETYPE','SOURCE_NODEGAP','MDSSUPPFUNC','CMPSTRESSN','ISONOTE','RTEXT', 'NODETYPE', 'NODEGAP', 'CMPSUPGAP', 'CMPSUPGAP_POS',
   'CMPSUPGAP_PS', 'DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'MDSSUPPTYPE',
-  'CMPSUPTYPE', 'SPRE', 'SUPPORT_KIND', 'SUPPORT_MAPPER_KIND', 'SUPPORT_TYPE',
+  'CMPSUPTYPE', 'SPRE', 'SKEY', 'CMPSUPSTIFF','CMPSUPFRICTION','SUPPORT_KIND', 'SUPPORT_MAPPER_KIND', 'SUPPORT_TYPE',
   'POS','POSI','COMPRE','ATTACHED_COMPONENT_REF','STIFFNESS','NODESTIFFNESS','FRICTION','NODEFRICTION',
   'DirectionCosineX','DirectionCosineY','DirectionCosineZ','DIRECTIONCOSINEX','DIRECTIONCOSINEY','DIRECTIONCOSINEZ'];
 const configKeys = ['supportMapping', 'supportTypeMapper', 'inputXmlRestraintTypeMutation',
-  'restraintTypeMutation', 'xml229RestraintKindOverrides', 'defaultStiffness', 'defaultGap', 'defaultFriction',
+  'restraintTypeMutation', 'xml229RestraintKindOverrides', 'xml229SourceFieldPrecedence', 'defaultStiffness', 'defaultGap', 'defaultFriction',
   'useFrictionSentinelForNonYSupports', 'supportKindToXmlType', 'dtxrPositionOffset',
   'dtxrCoordinateToleranceMm', 'coordinateTolerance', 'resolverJsonTrace', 'jsonTrace','xml229PhysicalVertexPrefinal','xml229SourceCoordinatePolicy','xml229SourceAttachmentPolicy'];
 
@@ -64,6 +64,18 @@ function fieldEvidence(name, after, before, selected, nodeGap, config, preserved
     rule: selected?.decision?.rule || null,
     attribute:selected?.decision?.rule?.matchEvidence?.sourceField||selected?.decision?.rule?.field||null,
     raw:selected?.decision?.rule?.matchEvidence?.value??attrs.NODETYPE??attrs.MDSDTXR??attrs.DTXR??null};
+  const flag={Gap:'gap',Stiffness:'stiffness',Friction:'friction'}[name];
+  if(flag&&config.xml229SourceFieldPrecedence?.[flag]===true&&selected){
+    const keys={gap:['CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'],
+      stiffness:['STIFFNESS','NODESTIFFNESS','CMPSUPSTIFF'],friction:['FRICTION','CMPSUPFRICTION']}[flag];
+    const selectedKey=keys.find(k=>text(attrs[k]));
+    const legacy={gap:'NODEGAP',stiffness:'NODESTIFF',friction:'NODEFRICTION'}[flag];
+    const receipt={policy:'xml229SourceFieldPrecedence.'+flag,legacyField:legacy,legacyRaw:attrs[legacy]??null};
+    if(selectedKey)return {...receipt,authority:'original-json',attribute:selectedKey,raw:attrs[selectedKey]};
+    const profile=config.supportMapping?.kindProfiles?.[selected.decision?.kind]||null;
+    if(flag!=='gap'||(profile?.gap!=null&&text(profile.gap)!==''))
+      return {...receipt,authority:'support-profile/config',profile,configuredRaw:profile?.[flag]??null};
+  }
   if (name === 'Gap') {
     const key = ['CMPSUPGAP', 'CMPSUPGAP_POS', 'CMPSUPGAP_PS', 'NODEGAP'].find(k => text(attrs[k]));
     if (key) return {authority: 'original-json', attribute: key, raw: attrs[key], unit: 'mm'};

@@ -207,7 +207,35 @@ export function generatedSupportKind(attrs = {}) {
   return '';
 }
 
+// Explicit project policy: only the six original source fields may win over
+// a valid governed NODETYPE. No generated label, NAME/SPRE or NODETYPE rule
+// can grant this exception. Use the saved Step 7 priority/match/source rules.
+export function stagedFieldKindDecision(attrs={},config={}) {
+  if(config.xml229SourceFieldPrecedence?.type!==true)return null;
+  const rawNodeType=Object.prototype.hasOwnProperty.call(attrs,'SOURCE_NODETYPE')?text(attrs.SOURCE_NODETYPE):text(attrs.NODETYPE);
+  const originalKind=nodeTypeSupportKind({...attrs,NODETYPE:rawNodeType},config);
+  if(!originalKind)return null;
+  const evidence=Object.fromEntries(Object.entries(fields(attrs)).filter(([key])=>
+    ['SKEY','DESCRIPTION','DESC','CMPSUPTYPE','DTXR','MDSSUPPTYPE'].includes(key)));
+  let receipt=null;
+  const kind=matchTableRules(attrs,evidence,tableRules(config),value=>{receipt=value;});
+  if(!kind||kind===originalKind)return null;
+  if(!GOVERNED.includes(kind))throw refuse('PREFINAL_RESTRAINT_KIND_UNSUPPORTED','Field precedence selected an unsupported restraint kind');
+  const described=describedKinds(evidence);
+  if(described.length>1||(described.length===1&&described[0]!==kind))
+    throw refuse('PREFINAL_RESTRAINT_KIND_AMBIGUOUS','Conflicting original source descriptions and Step 7 field rule');
+  const profile=migrateSupportMappingConfig(config).kindProfiles[kind];
+  const expected={REST:'+Y',GUIDE:'GUI',LINESTOP:'LIM'}[kind];
+  if(profile?.xmlTypes?.length!==1||profile.xmlTypes[0]!==expected)
+    throw refuse('PREFINAL_RESTRAINT_CONFIG_INVALID','Field precedence requires a single matching governed XML/CII profile type');
+  return {kind,source:'explicit-staged-field-precedence',rule:{...receipt.rule,
+    originalKind,originalNodeType:rawNodeType,effectiveXmlType:expected,
+    policy:'xml229SourceFieldPrecedence.type'}};
+}
+
 export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED, observe = null) {
+  const preferred=stagedFieldKindDecision(attrs,config);
+  if(preferred&&governed.includes(preferred.kind)){observe?.(preferred);return preferred;}
   const byNodeType = nodeTypeSupportKind(attrs, config);
   if (byNodeType && governed.includes(byNodeType)) {
     // A user-authored Step 7 row that names this member as another governed

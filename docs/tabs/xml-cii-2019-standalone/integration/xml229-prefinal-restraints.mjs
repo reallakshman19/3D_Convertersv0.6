@@ -44,6 +44,8 @@ function physicalAudit(vertex,before,document,config){
 export async function prepareXml229PrefinalRestraints({
  xmlText,stagedJsonText='',config={},policy='final',
 }){
+  if(config.xml229PhysicalVertexPrefinal===true&&Object.values(config.xml229SourceFieldPrecedence||{}).some(v=>v===true))
+    throw Object.assign(new Error('Source-field precedence is not qualified for physical-vertex V2'),{code:'PREFINAL_RESTRAINT_CONFIG_INVALID'});
   if(!['final','preview'].includes(policy))
     throw Object.assign(new Error('Unknown restraint pre-Final policy'),
       {code:'PREFINAL_RESTRAINT_POLICY_INVALID'});

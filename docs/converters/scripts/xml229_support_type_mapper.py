@@ -681,3 +681,30 @@ def owner_rule_kind(attrs, config, governed=('REST', 'GUIDE', 'LINESTOP')):
         if kind:
             return (kind, 'generated-label') if kind in governed else ('', '')
     return '', ''
+
+
+def staged_field_kind_decision(attrs, config, original_kind):
+    """Explicit source-field precedence; no generated labels or NODETYPE rule."""
+    if (config.get('xml229SourceFieldPrecedence') or {}).get('type') is not True or not original_kind:
+        return ''
+    evidence = {k:v for k,v in _owner_fields(attrs).items()
+                if k in ('SKEY','DESCRIPTION','DESC','CMPSUPTYPE','DTXR','MDSSUPPTYPE')}
+    decision = _match_table_rules(evidence, table_rules(config))
+    kind = decision['kind'] if decision else ''
+    if not kind or kind == original_kind:
+        return ''
+    expected = {'REST':'+Y','GUIDE':'GUI','LINESTOP':'LIM'}.get(kind)
+    if not expected:
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_KIND_UNSUPPORTED')
+    described = described_kinds(evidence)
+    if len(described)>1 or (described and described[0]!=kind):
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_KIND_AMBIGUOUS')
+    profiles = (config.get('supportMapping') or {}).get('kindProfiles') or {}
+    default = (config.get('supportKindToXmlType') or {}).get(kind, [expected])
+    types = (profiles.get(kind) or {}).get('xmlTypes', default)
+    if isinstance(types,str):
+        types = [v for part in re.split(r'[,;\n]',types) for v in re.split(r'(?<=\w)(?=\+)',part)]
+    types = [{'GUIDE':'GUI','X':'GUI','LIMIT':'LIM','LINESTOP':'LIM','Z':'LIM'}.get(str(v).strip().upper(),str(v).strip().upper()) for v in types if str(v).strip()]
+    if types != [expected]:
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_CONFIG_INVALID')
+    return kind
