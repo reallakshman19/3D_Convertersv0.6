@@ -360,7 +360,7 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
         if typ not in ('ATTA', 'ANCI'):
             continue
         evidence = kinds(resolve(node, branch, groups, tolerance(config), field, require,
-                                 resolver_index), require, config)
+                                 resolver_index, config), require, config)
         if evidence:
             for r in children(node, 'Restraint'):
                 if placeholder(r):
