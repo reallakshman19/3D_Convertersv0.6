@@ -65,6 +65,54 @@ def is_rest_hardware_member(attrs, kind):
             (code == 'AT05' and re.search(r'\bWEAR\s+PLATE\b', desc)))
 
 
+
+def mds_kind_conflict(attrs, config):
+    """Independently corroborated ST/GT hardware conflicts with staged NODETYPE."""
+    func = text(attrs.get('MDSSUPPFUNC')).upper()
+    if func not in ('ST', 'GT'):
+        return None
+    mds = text(attrs.get('MDSSUPPTYPE')).upper()
+    catalogue = text(attrs.get('CMPSUPTYPE')).upper()
+    gap = text(attrs.get('CMPSUPGAP'))
+    if (not re.fullmatch(func + r'[0-9]+', mds) or
+            not re.fullmatch(r'LS-[A-Z0-9-]+' if func == 'ST' else r'PG-[A-Z0-9-]+', catalogue) or
+            not re.search(r'[-+]?\d+(?:\.\d+)?\s*mm', gap, re.I)):
+        return None
+    source_kind = {'+Y':'REST','GUI':'GUIDE','LIM':'LINESTOP'}.get(node_type_mutation(attrs,config), '')
+    physical_kind = 'LINESTOP' if func == 'ST' else 'GUIDE'
+    if not source_kind or physical_kind == source_kind:
+        return None
+    return {'code': 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT',
+            'sourceKind': source_kind, 'candidateKind': physical_kind,
+            'sourceName': text(attrs.get('NAME')),
+            'fields': {k: text(attrs.get(k)) for k in
+                ('NAME','NODETYPE','MDSSUPPFUNC','MDSSUPPTYPE','CMPSUPTYPE','CMPSUPGAP')}}
+
+
+def mds_kind_approval(attrs, config, conflict):
+    if not conflict:
+        return None
+    rows = config.get('xml229RestraintKindOverrides') or []
+    if not isinstance(rows, list):
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_OVERRIDE_INVALID')
+    matches = [row for row in rows if isinstance(row, dict) and
+               text(row.get('memberName')) == conflict['sourceName']]
+    if len(matches) > 1:
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_OVERRIDE_AMBIGUOUS')
+    if not matches:
+        return None
+    row = matches[0]
+    if (row.get('approved') is not True or
+            text(row.get('kind')).upper() != conflict['candidateKind'] or
+            not text(row.get('approvedBy')) or not text(row.get('evidenceRef'))):
+        return None
+    expected = row.get('expected') or {}
+    if not isinstance(expected, dict) or any(text(expected.get(k)) != v
+        for k,v in conflict['fields'].items()):
+        return None
+    return conflict['candidateKind']
+
+
 def kinds(entries, require, config=None):
     config = config or {}
     out = {}
@@ -72,9 +120,13 @@ def kinds(entries, require, config=None):
         a = e['attrs']
         # Owner rule (12 Nov, RCA-04): the source NODETYPE (after the 8 Config
         # mutation) wins when present: 14 -> REST, 8 -> GUIDE, 9 -> LINESTOP.
-        node_type_kind = {'+Y': 'REST', 'GUI': 'GUIDE', 'LIM': 'LINESTOP'}.get(
+        conflict = mds_kind_conflict(a,config)
+        approval = mds_kind_approval(a,config,conflict) if conflict else None
+        if conflict:
+            require(bool(approval), 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+        node_type_kind = approval or {'+Y': 'REST', 'GUI': 'GUIDE', 'LIM': 'LINESTOP'}.get(
             node_type_mutation(a, config), '')
-        if node_type_kind:
+        if node_type_kind and not approval:
             node_type_user_row_conflict(a, config, node_type_kind)
         table_kind = '' if node_type_kind else owner_rule_kind(a, config)[0]
         if table_kind:
@@ -292,6 +344,12 @@ def append_profile(node, kind, attrs, config, allowed=None):
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
     gap = str(require_gap)
     original_type = node_type_mutation(attrs, config)
+    conflict = mds_kind_conflict(attrs,config)
+    approval = mds_kind_approval(attrs,config,conflict) if conflict else None
+    if conflict and not approval:
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+    if approval:
+        original_type = {'REST': '+Y', 'GUIDE': 'GUI', 'LINESTOP': 'LIM'}[approval]
     if original_type in ('+Y','GUI','LIM') and original_type != {
             'REST':'+Y','GUIDE':'GUI','LINESTOP':'LIM'}[kind]:
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
