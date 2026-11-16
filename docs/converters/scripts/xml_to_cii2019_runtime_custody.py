@@ -17,6 +17,7 @@ Adds four narrow mechanics on top of xml_to_cii2019_direction:
 from __future__ import annotations
 
 from collections import Counter
+import json
 import math
 import sys
 import xml.etree.ElementTree as ET

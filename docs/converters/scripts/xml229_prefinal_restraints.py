@@ -77,14 +77,18 @@ def mds_kind_conflict(attrs, config):
     if (not re.fullmatch(func + r'[0-9]+', mds) or
             not re.fullmatch(r'LS-[A-Z0-9-]+' if func == 'ST' else r'PG-[A-Z0-9-]+', catalogue)):
         return None
-    source_kind = {'+Y':'REST','GUI':'GUIDE','LIM':'LINESTOP'}.get(node_type_mutation(attrs,config), '')
+    # ATT/RVM may add a Step 7-proposed NODETYPE; original evidence stored
+    # as SOURCE_NODETYPE must not be silently reclassified for native Final.
+    raw_type = text(attrs.get('SOURCE_NODETYPE')) if 'SOURCE_NODETYPE' in attrs else text(attrs.get('NODETYPE'))
+    source_kind = {'+Y':'REST','GUI':'GUIDE','LIM':'LINESTOP'}.get(
+        node_type_mutation({**attrs, 'NODETYPE': raw_type},config), '')
     physical_kind = 'LINESTOP' if func == 'ST' else 'GUIDE'
     if not source_kind or physical_kind == source_kind:
         return None
     return {'code': 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT',
             'sourceKind': source_kind, 'candidateKind': physical_kind,
             'sourceName': text(attrs.get('NAME')),
-            'fields': {k: text(attrs.get(k)) for k in
+            'fields': {k: (raw_type if k == 'NODETYPE' else text(attrs.get(k))) for k in
                 ('NAME','NODETYPE','MDSSUPPFUNC','MDSSUPPTYPE','CMPSUPTYPE','CMPSUPGAP')}}
 
 
