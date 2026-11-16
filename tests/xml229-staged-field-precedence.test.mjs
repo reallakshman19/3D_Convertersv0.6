@@ -93,3 +93,72 @@ test('raw SOURCE_NODETYPE cannot be silently hidden by a proposed effective NODE
  assert.equal(guideAudit.decision.rule.originalNodeType,'14');
  assert.equal(guideAudit.source.member.fields.SOURCE_NODETYPE,'14');
 });
+
+function regenerated(){
+ const source=input();
+ for(const [index,code,rule] of [[1,'9','builtin-ls'],[2,'8','builtin-pg']]){
+   const attrs=source[0].children[index].attributes;
+   Object.assign(attrs,{SOURCE_NODETYPE:'14',SOURCE_NODEGAP:'0',NODETYPE:code,
+     NODETYPE_CODES:[code],NODETYPE_CLASSIFICATION_SOURCE:'STEP7_SUPPORT_MAPPING',
+     SUPPORT_EFFECTIVE_NODETYPE:code,SUPPORT_MAPPING_RULE_ID:rule,
+     SUPPORT_MAPPING_STATUS:'FOR_REVIEW_SOURCE_NODETYPE_CORRECTED',
+     SUPPORT_MAPPING_REQUIRES_ENGINEERING_APPROVAL:true});
+ }
+ return source;
+}
+test('regenerated export: original type custody, actual current policy receipt and native verification',async()=>{
+ const source=regenerated(),before=JSON.stringify(source);
+ const off=await stage(source,cfg,'preview');
+ assert.equal(off.restraintReview.status,'FOR_REVIEW');
+ assert.deepEqual(off.restraintReview.policySummary.warningReasons,{STEP7_TYPE_PRECEDENCE_OFF:2});
+ const accepted=await stage(source,all,'preview');
+ assert.equal(accepted.restraintReview.status,'CLEAR');
+ assert.equal(accepted.restraintReview.policySummary.typeDecisionOccurrences,2);
+ assert.equal(accepted.restraintReview.policySummary.uniqueTypeDecisionMembers,2);
+ assert.equal(accepted.restraintReview.policySummary.flags.type,true);
+ assert.match(accepted.restraintReview.policySummary.configSha256,/^[a-f0-9]{64}$/);
+ const guide=accepted.proof.restraintAudit.records.find(x=>x.after?.Type==='GUI');
+ assert.equal(guide.decision.rule.resolutionStatus,'RESOLVED_BY_STEP7_POLICY');
+ assert.equal(guide.decision.rule.exportedProposalVerified,true);
+ assert.equal(guide.source.member.fields.SOURCE_NODETYPE,'14');
+ assert.deepEqual(numericRows(native(source,all)),numericRows(rows(accepted.document)));
+ assert.equal(JSON.stringify(source),before);
+ const gapless=regenerated();gapless[0].children[2].attributes.CMPSUPGAP='';
+ const typeOnly=await stage(gapless,{...all,xml229SourceFieldPrecedence:{type:true}},'preview');
+ assert.deepEqual(typeOnly.restraintReview.policySummary.warningReasons,{STEP7_GAP_POLICY_OR_SAVED_GAP_REQUIRED:1});
+ const gap=await stage(gapless,all,'preview');
+ assert.equal(gap.restraintReview.status,'CLEAR');
+ assert.equal(numericRows(rows(gap.document)).find(r=>r[0]==='GUI')[1],12);
+ const stale=regenerated();stale[0].children[2].attributes.NODETYPE_CODES=['14'];
+ const held=await stage(stale,all,'preview');
+ assert.deepEqual(held.restraintReview.policySummary.warningReasons,{STEP7_RULE_OR_EXPORTED_PROPOSAL_MISMATCH:1});
+ await assert.rejects(stage(stale,all),{code:'PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT'});
+ assert.throws(()=>native(stale,all),/NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT/);
+});
+test('actual independent O1 Worker recomputes the review against its own config, no global Preview status',async()=>{
+ const source=regenerated(),json=JSON.stringify(source),blob=new Blob([json]);
+ const sha=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',await blob.arrayBuffer())),v=>v.toString(16).padStart(2,'0')).join('');
+ const old={onmessage:globalThis.onmessage,postMessage:globalThis.postMessage,close:globalThis.close};
+ try{
+   globalThis.onmessage=null;globalThis.close=()=>{};
+   const messages=[];globalThis.postMessage=m=>messages.push(m);
+   await import('../tabs/xml-cii-2019-standalone/workers/lfj-o1-resolver-domain-worker.mjs');
+   const run=async(config,id)=>{
+     messages.length=0;
+     await globalThis.onmessage({data:{schema:'LFJ.O1.DomainWorker.v1',kind:'RUN',jobId:id,
+       sourceRefId:'synthetic',sourceSha256:sha,sourceRevision:'v1',selectionDigest:'ALL',
+       byteLength:blob.size,committedRoot:{startByte:0,endByteExclusive:blob.size},jsonBlob:blob,
+       sourceText:XML,sourceKind:'xml',jsonConfig:cfg.resolverJsonTrace,supportConfigJson:JSON.stringify(config)}});
+     const ready=messages.find(m=>m.kind==='READY');
+     assert.ok(ready,JSON.stringify(messages));
+     await globalThis.onmessage({data:{schema:'LFJ.O1.DomainWorker.v1',kind:'CANCEL'}});
+     return ready;
+   };
+   const off=await run(cfg,'off'),on=await run(all,'on');
+   assert.equal(off.restraintReview.status,'FOR_REVIEW');
+   assert.equal(on.restraintReview.status,'CLEAR');
+   assert.equal(on.restraintReview.policySummary.typeDecisionOccurrences,2);
+   assert.equal(on.restraintReview.sourceBasis.jsonSha256,sha);
+   assert.equal(on.engineeringReady,false);
+ }finally{Object.assign(globalThis,old);}
+});

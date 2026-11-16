@@ -19,4 +19,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --test tests/xml229-staged-field-precedence.test.mjs tests/xml229-json-restraint-body-transfer.test.mjs tests/xml-cii-mds-position-restraints.test.mjs tests/xml229-all-mapper-source-gap.test.mjs
+      - run: node --test tests/xml229-staged-field-precedence.test.mjs tests/xml229-json-restraint-body-transfer.test.mjs tests/xml-cii-mds-position-restraints.test.mjs tests/xml229-all-mapper-source-gap.test.mjs tests/xml229-preview-restraint-review-policy.test.mjs
