@@ -1,3 +1,7 @@
+import {
+  canonicalPsOnly, literalSupportRoot, normalizeResolverMatchMode,
+  DEFAULT_PS_STRIP_SUFFIXES,
+} from './xml-cii-resolver-match-policy.js';
 import { sourceFieldEvidence } from '../../converters/xml-cii2019-core/source-schema-adapter.js';
 import { groupTraceEntriesSpatially } from './xml-cii-trace-spatial-index.js';
 
@@ -168,9 +172,9 @@ function ownPosition(attrs, value, config) {
     const raw = attrValue(attrs, [alias]);
     const parsed = parseStandaloneDtxrPoint(raw);
     if (!parsed) continue;
-    return alias === 'POSI' ? offsetPoint(parsed, configuredOffset) : parsed;
+    return offsetPoint(parsed, configuredOffset);
   }
-  return parseStandaloneDtxrPoint(value?.position || value?.point || '');
+  return offsetPoint(parseStandaloneDtxrPoint(value?.position || value?.point || ''), configuredOffset);
 }
 
 function descriptionParts(value, attrs, type, hasChildren) {
@@ -193,9 +197,9 @@ function sourceNodeNo(attrs, sequence) {
   return explicit || String(sequence);
 }
 
-function walkStaged(value, context, out, path, sequenceRef, config) {
+function walkStaged(value, context, out, path, sequenceRef, config, requirePoint = true) {
   if (Array.isArray(value)) {
-    value.forEach((item, index) => walkStaged(item, context, out, `${path}[${index}]`, sequenceRef, config));
+    value.forEach((item, index) => walkStaged(item, context, out, `${path}[${index}]`, sequenceRef, config, requirePoint));
     return;
   }
   if (!value || typeof value !== 'object') return;
@@ -216,7 +220,7 @@ function walkStaged(value, context, out, path, sequenceRef, config) {
   const cmpSupGap = text(attrValue(attrs, ['CMPSUPGAP', 'SUPPORT GAP']));
   const isBranchContainer = type === 'BRANCH';
   const isCoordinateContainer = !!directPoint && hasChildren && !parts.description && !parts.dtxrPs;
-  if (!isBranchContainer && !isCoordinateContainer && (parts.description || parts.dtxrPs || cmpSupGap) && point) {
+  if (!isBranchContainer && !isCoordinateContainer && (parts.description || parts.dtxrPs || cmpSupGap) && (point || !requirePoint)) {
     out.push({
       jsonNodeNo: sourceNodeNo(attrs, sequence),
       jsonSequence: sequence,
@@ -238,7 +242,7 @@ function walkStaged(value, context, out, path, sequenceRef, config) {
   }
   if (hasChildren) {
     const next = { branchName, point, bore };
-    value.children.forEach((child, index) => walkStaged(child, next, out, `${path}.children[${index}]`, sequenceRef, config));
+    value.children.forEach((child, index) => walkStaged(child, next, out, `${path}.children[${index}]`, sequenceRef, config, requirePoint));
   }
 }
 
@@ -461,9 +465,10 @@ function supportKinds(value) {
   return uniqueValues(kinds);
 }
 
-function recordForNode(node, groups, toleranceMm) {
-  const xmlTag = normalizeSupportTag(node.xmlNodeName || node.psKey || node.componentRefNo);
-  const explicitAuthority = explicitPsAuthority(node.xmlBranch, xmlTag, groups);
+function recordForNode(node, groups, toleranceMm, mode = 'LEGACY') {
+  const positionalOnly = mode === 'POS';
+  const xmlTag = positionalOnly ? '' : normalizeSupportTag(node.xmlNodeName || node.psKey || node.componentRefNo);
+  const explicitAuthority = positionalOnly ? null : explicitPsAuthority(node.xmlBranch, xmlTag, groups);
   const candidate = node.xmlPoint
     ? groupCandidate(node.xmlBranch, node.xmlPoint, xmlTag, groups, toleranceMm)
     : { best: null, ambiguous: false, candidates: [] };
@@ -476,7 +481,7 @@ function recordForNode(node, groups, toleranceMm) {
   const group = positional?.group || null;
   const dtxrPosValues = group ? uniqueValues(group.entries.map((entry) => entry.labeled || entry.description)) : [];
   const psEntry = group?.entries.find((entry) => xmlTag && entry.tags.includes(xmlTag)) || null;
-  const fallback = explicitAuthority?.entry ? explicitAuthority : (!psEntry ? globalPsFallback(node.xmlBranch, xmlTag, groups) : null);
+  const fallback = positionalOnly ? null : (explicitAuthority?.entry ? explicitAuthority : (!psEntry ? globalPsFallback(node.xmlBranch, xmlTag, groups) : null));
   const effectivePsEntry = explicitAuthority?.entry || psEntry || fallback?.entry || null;
   const dtxrPsValue = effectivePsEntry ? text(effectivePsEntry.dtxrPs || effectivePsEntry.description) : '';
   const dtxrPosValue = dtxrPosValues.join(' | ');
@@ -588,6 +593,156 @@ function applyGroupOffset(groups, offset) {
     anchor: offsetPoint(group.anchor, offset),
     entries: group.entries.map((entry) => ({ ...entry, point: offsetPoint(entry.point, offset) })),
   }));
+}
+
+
+// Identity-only modes do not use the positional index or PS matching regex in
+// ROOT mode. Keep members separate and retain their original source paths.
+function resolverMatchMode(config = {}) {
+  const value = config?.resolverJsonTrace?.matchMode ?? config?.jsonTrace?.matchMode
+    ?? config?.matchMode;
+  return value == null ? 'LEGACY' : normalizeResolverMatchMode(value);
+}
+
+function resolverSuffixes(config = {}) {
+  return config?.resolverJsonTrace?.psFallback?.stripSuffixes
+    ?? config?.jsonTrace?.psFallback?.stripSuffixes
+    ?? config?.psFallback?.stripSuffixes ?? DEFAULT_PS_STRIP_SUFFIXES;
+}
+
+function identityForMember(entry, mode, config) {
+  const attrs = safeObject(entry?.raw?.attributes);
+  if (mode === 'ROOT') {
+    // The explicit support reference is the authoritative physical root.
+    const source = attrValue(attrs, ['CMPSUPREFN', 'SUPPORT_GROUP_REF', 'SUPPORTROOT',
+      'SUPPORT_GROUP', 'PSROOT']) || entry?.name || entry?.raw?.name || '';
+    return literalSupportRoot(source);
+  }
+  const candidates = [entry?.name, entry?.dtxrPs, attrValue(attrs, ['PS', 'SupportTag']),
+    attrValue(attrs, ['CMPSUPREFN'])];
+  for (const candidate of candidates) {
+    const id = canonicalPsOnly(candidate, resolverSuffixes(config));
+    if (id) return id;
+  }
+  return '';
+}
+
+function buildStandaloneDtxrIdentityGroups(stagedJsonText, mode, config) {
+  let parsed;
+  try { parsed = typeof stagedJsonText === 'string' ? JSON.parse(stagedJsonText) : stagedJsonText; }
+  catch { return []; }
+  const entries = [];
+  walkStaged(parsed, { branchName: '', point: null, bore: '' },
+    entries, '
+  const toleranceMm = toleranceFromConfig(config);
+  const mode = resolverMatchMode(config);
+  const nodes = parseStandaloneDtxrXmlNodes(sourceText);
+  let groups = mode === 'PS' || mode === 'ROOT'
+    ? buildStandaloneDtxrIdentityGroups(stagedJsonText, mode, config)
+    : buildStandaloneDtxrPositionGroups(stagedJsonText, toleranceMm, config);
+  let records = nodes.map((node) => mode === 'PS' || mode === 'ROOT'
+    ? recordForIdentityNode(node, groups, toleranceMm, mode, config)
+    : recordForNode(node, groups, toleranceMm, mode));
+  let calibration = null;
+  if ((mode === 'POS' || mode === 'LEGACY') && !records.some((record) => record.effectiveSource === 'DTXR_POS')) {
+    calibration = inferPositionOffset(nodes, groups, config);
+    if (calibration) {
+      groups = applyGroupOffset(groups, calibration);
+      records = nodes.map((node) => recordForNode(node, groups, toleranceMm, mode));
+    }
+  }
+  const diagnostics = [
+    { type: 'trace-resolution-ledger', schema: LEDGER_SCHEMA, rows: records.length, matchMode: mode },
+    { type: 'trace-resolution-position-groups', groups: groups.length, toleranceMm },
+    { type: 'trace-resolution-status-counts', counts: records.reduce((out, record) => { out[record.status] = (out[record.status] || 0) + 1; return out; }, {}) },
+  ];
+  if (calibration) diagnostics.push({ type: 'trace-resolution-auto-position-offset', ...calibration });
+  for (const record of records) {
+    if (record.status !== 'UNRESOLVED' || record.xmlNodeName || record.xmlPoint) diagnostics.push({ type: 'standalone-dtxr-node-resolution', ...record });
+  }
+  return {
+    schema: LEDGER_SCHEMA,
+    sourceKind: 'staged-json',
+    toleranceMm,
+    nodes,
+    groups,
+    records,
+    ledger: records,
+    calibration,
+    diagnostics,
+  };
+}
+
+export { LEDGER_SCHEMA as TRACE_RESOLUTION_LEDGER_SCHEMA };
+, { value: 0 }, config, false);
+  const groups = [], byKey = new Map();
+  for (const entry of entries) {
+    const identity = identityForMember(entry, mode, config);
+    if (!identity) continue;
+    const key = entry.branch.root + '|' + identity;
+    let group = byKey.get(key);
+    if (!group) {
+      group = { id: 'DTXR-' + mode + '-G' + (groups.length + 1),
+        branch: entry.branch, anchor: entry.point || null, entries: [], identityKey: identity };
+      groups.push(group);
+      byKey.set(key, group);
+    }
+    group.entries.push(entry);
+  }
+  return groups.map((group) => ({
+    ...group, jsonNodeNos: uniqueValues(group.entries.map((entry) => entry.jsonNodeNo)),
+    maxInternalDistanceMm: null,
+  }));
+}
+
+function recordForIdentityNode(node, groups, toleranceMm, mode, config) {
+  const identity = mode === 'ROOT'
+    ? literalSupportRoot(node.xmlNodeName || node.psKey || node.componentRefNo)
+    : canonicalPsOnly(node.xmlNodeName || node.psKey || node.componentRefNo,
+      resolverSuffixes(config));
+  const candidates = groups.filter((group) => group.identityKey === identity && identity)
+    .map((group) => ({
+      group, relationship: standaloneDtxrBranchRelationship(node.xmlBranch, group.branch.full),
+    }))
+    .filter((item) => item.relationship.compatible)
+    .sort((a, b) => b.relationship.score - a.relationship.score || a.group.id.localeCompare(b.group.id));
+  const ambiguous = candidates.length > 1 && candidates[0].relationship.score === candidates[1].relationship.score;
+  const winner = !ambiguous ? candidates[0] : null;
+  const group = winner?.group || null;
+  const members = group?.entries || [];
+  const parts = uniqueValues(members.map((entry) => entry.labeled || entry.description));
+  const resolved = !!group;
+  const matchType = ambiguous ? mode + '_AMBIGUOUS' : (resolved ? mode : 'NONE');
+  const status = ambiguous ? 'AMBIGUOUS_REVIEW'
+    : resolved ? (mode === 'ROOT' ? 'RESOLVED_ROOT' : 'RESOLVED_PS_FALLBACK') : 'UNRESOLVED';
+  const joined = parts.join(' | ');
+  return {
+    schema: LEDGER_SCHEMA, xmlIndex: node.xmlIndex, xmlNodeNumber: node.xmlNodeNumber,
+    nodeNumber: node.xmlNodeNumber, xmlNodeName: node.xmlNodeName,
+    nodeName: node.xmlNodeName, componentType: node.componentType,
+    componentRefNo: node.componentRefNo, xmlBranch: node.xmlBranch,
+    branchName: node.xmlBranch, xmlPosition: node.xmlPosition, xmlPoint: node.xmlPoint,
+    sourceKind: 'staged-json',
+    sourceBranch: group?.branch.original || '', stagedBranch: group?.branch.original || '',
+    branchRelationship: winner?.relationship.method || '',
+    coordinateToleranceMm: toleranceMm, toleranceMm,
+    matchedPosition: group?.anchor || null, positionDistanceMm: null, distanceMm: null,
+    maxInternalDistanceMm: null, dtxrPosNodeNumbers: [],
+    dtxrPsNodeNumbers: members.map((entry) => entry.jsonNodeNo),
+    positionMembers: members.map((entry) => ({
+      jsonNodeNo: entry.jsonNodeNo, sourcePath: entry.path,
+      branchName: entry.branchName, bore: entry.bore, point: entry.point,
+      type: entry.type, name: entry.name, dtxrPosValue: entry.labeled || entry.description,
+      dtxrPsValue: entry.dtxrPs || '', cmpSupGap: entry.cmpSupGap,
+    })),
+    sourcePaths: members.map((entry) => entry.path),
+    dtxrPosValue: '', dtxrPos: '', dtxrPosValues: [],
+    dtxrPsName: identity, dtxrPsValue: joined, dtxrPs: joined,
+    effectiveDtxr: joined, effectiveSource: resolved ? (mode === 'ROOT' ? 'ROOT' : 'DTXR_PS_FALLBACK') : 'NONE',
+    fallbackUsed: mode === 'PS' && resolved, fallbackAuthority: mode + '-exact-canonical',
+    fallbackReason: '', derivedSupportTypes: supportKinds(joined), matchType, status,
+    candidateCount: candidates.length, groupId: group?.id || '', matchMode: mode,
+  };
 }
 
 export function buildStandaloneDtxrResolutionLedger(sourceText, stagedJsonText, config = {}) {
