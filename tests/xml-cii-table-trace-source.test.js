@@ -15,6 +15,9 @@ function prepareEsmFixture() {
     'tabs/xml-cii-2019-standalone/xml-cii-table-trace-config.js',
     'tabs/xml-cii-2019-standalone/xml-cii-table-trace-match.js',
     'tabs/xml-cii-2019-standalone/xml-cii-trace-resolution-ledger.js',
+    'tabs/xml-cii-2019-standalone/xml-cii-resolver-match-policy.js',
+    'tabs/xml-cii-2019-standalone/xml-cii-trace-spatial-index.js',
+    'converters/xml-cii2019-core/source-schema-adapter.js',
   ]) {
     const target = path.join(tempRoot, relPath);
     fs.mkdirSync(path.dirname(target), { recursive: true });
