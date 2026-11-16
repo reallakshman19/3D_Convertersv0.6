@@ -10,7 +10,7 @@ import {assertBasisDigest,assertContentDigest,digestUtf8,digestCanonical,canonic
   from '../../../contracts/gc-pw-v1/contract.mjs';
 
 import {executeXml229OriginalPreview} from '../integration/xml229-preview-original-blob-execution.mjs';
-import { recordPreviewFailure,recordPreviewRestraintReview } from './xml-cii-adapted-preview-failure-notice.js';
+import { recordPreviewFailure,recordPreviewRestraintReview,showRestraintPolicySummary } from './xml-cii-adapted-preview-failure-notice.js';
 
 const jobs=new WeakMap();
 const esc=(v)=>String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;')
@@ -135,6 +135,7 @@ export async function runPreviewButtonSession({
   };
   const retry=()=>void runPreviewButtonSession({host,rootEl,xmlText,config,options,renderResult});
   const begun=Date.now();
+  recordPreviewRestraintReview(null);recordPreviewFailure(null);
   try {
     // Validate explicit original scope before reading JSON or dispatching any Worker.
     const scope=sourceScope(host,config,options);
@@ -206,6 +207,7 @@ export async function runPreviewButtonSession({
           proof.verifiedFactCount+' complete FactRecords. '+
           'Weight Match uses this same session; native CII Run remains HELD.';
         host.prepend(evidence);
+        showRestraintPolicySummary(host,result.restraintReview);
         if(result.restraintReview?.status==='FOR_REVIEW'){
           const warning=document.createElement('div');
           warning.setAttribute('data-mc-preview-restraint-review','');
@@ -216,7 +218,7 @@ export async function runPreviewButtonSession({
           const details=rows.slice(0,8).map(w=>
             'Node '+String(w.nodeNumber||'?')+' / '+
             String(w.member?.name||w.member?.path||'source member')+
-            ': '+String(w.code||'FOR_REVIEW')).join(' | ');
+            ': '+String(w.code||'FOR_REVIEW')+(w.resolutionReason?' ('+w.resolutionReason+')':'')).join(' | ');
           warning.textContent='For Review: '+rows.length+
             ' restraint source conflict(s) quarantined. Independent Weight continues; '+
             'engineering acceptance HOLD and native Final CII blocked. '+

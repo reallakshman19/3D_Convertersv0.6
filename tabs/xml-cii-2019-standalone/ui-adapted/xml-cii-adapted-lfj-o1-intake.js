@@ -306,7 +306,7 @@ export function installLfjO1SourceIntake(container,stateRef){
     if(!(el instanceof Element))return;
     if(el.matches('[data-field="source-file"], [data-field="source-kind"],'+
       ' [data-field="support-config"], [data-field="resolver-json-config"],'+
-      ' [data-field^="resolver-"], [data-field*="scope"],'+
+      ' [data-field^="resolver-"], [data-field^="xml229-source-field-precedence-"], [data-field*="scope"],'+
       ' [data-branch-select], [data-branch-scope], [data-mode-a-enable]')){
       const originalXmlChanged=el.matches('[data-field="source-file"], [data-field="source-kind"]');
       // XML file/source kind is part of the job's user selection. Cancel

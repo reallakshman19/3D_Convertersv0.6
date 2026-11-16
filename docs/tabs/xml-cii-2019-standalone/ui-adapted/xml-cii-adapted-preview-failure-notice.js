@@ -43,10 +43,10 @@ export function recordPreviewRestraintReview(value){
 }
 export function lastPreviewRestraintReview(){return review;}
 
-function paintStatus(panel){
+function paintStatus(panel,failureValue=last,reviewValue=review){
  if(!panel)return;
  let blocked=panel.querySelector('[data-preview-blocker]');
- const failure=last&&/^PREFINAL_RESTRAINT_/.test(last.code)?last:null;
+ const failure=failureValue&&/^PREFINAL_RESTRAINT_/.test(failureValue.code)?failureValue:null;
  if(!failure)blocked?.remove();
  else{
   if(!blocked){
@@ -58,7 +58,7 @@ function paintStatus(panel){
   blocked.textContent='Preview blocked: '+failure.code+' — '+failure.message;
  }
  let warning=panel.querySelector('[data-preview-restraint-review]');
- if(review?.status!=='FOR_REVIEW'){warning?.remove();return;}
+ if(reviewValue?.status!=='FOR_REVIEW'){warning?.remove();return;}
  if(!warning){
   warning=document.createElement('div');
   warning.dataset.previewRestraintReview='true';
@@ -66,12 +66,13 @@ function paintStatus(panel){
   warning.style.cssText='color:#fde68a;background:#422006;border:1px solid #d97706;padding:8px;border-radius:5px;';
   panel.append(warning);
  }
- const count=review.warnings.length;
- const first=review.warnings.slice(0,5).map(w=>
+ const count=reviewValue.warnings.length;
+ const first=reviewValue.warnings.slice(0,5).map(w=>
    (w.nodeNumber?'Node '+w.nodeNumber+': ':'')+
-   (w.memberName||w.path||w.sourcePaths[0]||'source member')+' — '+w.code);
+   (w.memberName||w.member?.name||w.path||w.member?.path||w.sourcePaths?.[0]||'source member')+' — '+w.code+
+   (w.resolutionReason?' ('+w.resolutionReason+')':''));
  warning.textContent='For Review — '+count+' quarantined restraint source conflict(s), '+
-   review.quarantinedXmlNodeCount+' XML node(s). Preview and independent Weight can continue; '+
+   reviewValue.quarantinedXmlNodeCount+' XML node(s). Preview and independent Weight can continue; '+
    'engineering acceptance HOLD, approved Final CII blocked. '+
    first.join(' | ')+(count>5?' | +'+(count-5)+' more':'');
 }
@@ -86,3 +87,31 @@ export function showPreviewBlocker(panel){
  }
 }
 export const showPreviewRestraintStatus=showPreviewBlocker;
+
+export function showRestraintPolicySummary(panel,receipt){
+ const p=receipt?.policySummary;
+ if(!panel||!p)return;
+ const status=document.createElement('p');
+ status.dataset.restraintPolicySummary='true';
+ status.setAttribute('role','status');
+ const flags=['type','gap','stiffness','friction','mappedCodes'].map(k=>k+': '+(p.flags?.[k]?'ON':'OFF')).join(' | ');
+ const gaps=['REST','GUIDE','LINESTOP'].map(k=>k+' '+(p.savedGaps?.[k]??'not saved')).join(', ');
+ const reasons=Object.entries(p.warningReasons||{}).map(([k,v])=>k+': '+v).join(' | ');
+ status.textContent='Effective Step 7 policy — '+flags+'. Saved gaps (mm): '+gaps+
+   '. RESOLVED_BY_STEP7_POLICY: '+p.typeDecisionOccurrences+' type decisions / '+p.uniqueTypeDecisionMembers+
+   ' distinct source members. Mapped-code decisions: '+(p.mappedCodeDecisionOccurrences||0)+'. '+(reasons?'Remaining review reasons: '+reasons+'. ':'')+
+   'Config SHA-256: '+p.configSha256+'. Not engineering approval.';
+ panel.append(status);
+}
+export function showIndependentRestraintStatus(panel,receipt){
+ if(receipt?.status==='REVIEW_BLOCKED'||receipt?.status==='NOT_ASSESSED'||!receipt){
+   const status=document.createElement('p');status.dataset.restraintReviewUnavailable='true';
+   status.setAttribute('role','status');
+   status.textContent=receipt?.status==='REVIEW_BLOCKED'
+     ?'O1 restraint assessment blocked: '+receipt.code+' — '+receipt.message+'. Source trace is not engineering approval.'
+     :'O1 restraint assessment not available for this selection. Source trace is not engineering approval.';
+   panel.append(status);return;
+ }
+ paintStatus(panel,null,receipt);
+ showRestraintPolicySummary(panel,receipt);
+}

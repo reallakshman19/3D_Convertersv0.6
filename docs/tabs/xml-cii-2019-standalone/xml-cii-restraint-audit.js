@@ -1,6 +1,8 @@
 /** Private run evidence. Records existing decisions; never classifies or writes restraints. */
 import {digestCanonical, digestUtf8} from '../../contracts/gc-pw-v1/contract.mjs';
 
+import {mappedCodePrecedenceEnabled} from '../../converters/xml-cii2019-core/support-kind-precedence.js';
+
 export const RESTRAINT_AUDIT_SCHEMA = 'XML229.RestraintAudit.v1';
 const local = n => String(n?.localName || n?.nodeName || '').replace(/^.*:/, '');
 const children = (n, tag) => [...(n?.childNodes || [])].filter(c => c.nodeType === 1 && local(c) === tag);
@@ -11,7 +13,7 @@ const type = v => ({REST:'+Y', Y:'+Y', '14':'+Y', GUIDE:'GUI', '8':'GUI',
   LINESTOP:'LIM', LIMIT:'LIM', '9':'LIM'}[String(v).toUpperCase()] || String(v).toUpperCase());
 const text = v => v == null ? '' : String(v).trim();
 const clone = v => JSON.parse(JSON.stringify(v));
-const sourceFields = ['NAME','REF','TYPE','RAW_TYPE','NODESTIFF','SOURCE_NODETYPE','SOURCE_NODEGAP','MDSSUPPFUNC','CMPSTRESSN','ISONOTE','RTEXT', 'NODETYPE', 'NODEGAP', 'CMPSUPGAP', 'CMPSUPGAP_POS',
+const sourceFields = ['NAME','REF','TYPE','RAW_TYPE','NODESTIFF','SOURCE_NODETYPE','SOURCE_NODEGAP','NODETYPE_CODES','NODETYPE_CLASSIFICATION_SOURCE','SUPPORT_EFFECTIVE_NODETYPE','SUPPORT_EFFECTIVE_GAP','SUPPORT_GAP_SOURCE','SUPPORT_MAPPING_STATUS','SUPPORT_MAPPING_RULE_ID','SUPPORT_MAPPING_REQUIRES_ENGINEERING_APPROVAL','MDSSUPPFUNC','CMPSTRESSN','ISONOTE','RTEXT', 'NODETYPE', 'NODEGAP', 'CMPSUPGAP', 'CMPSUPGAP_POS',
   'CMPSUPGAP_PS', 'DTXR', 'DESC', 'DESCRIPTION', 'MDSDTXR', 'MDSSUPPTYPE',
   'CMPSUPTYPE', 'SPRE', 'SKEY', 'CMPSUPSTIFF','CMPSUPFRICTION','SUPPORT_KIND', 'SUPPORT_MAPPER_KIND', 'SUPPORT_TYPE',
   'POS','POSI','COMPRE','ATTACHED_COMPONENT_REF','STIFFNESS','NODESTIFFNESS','FRICTION','NODEFRICTION',
@@ -22,7 +24,12 @@ const configKeys = ['supportMapping', 'supportTypeMapper', 'inputXmlRestraintTyp
   'dtxrCoordinateToleranceMm', 'coordinateTolerance', 'resolverJsonTrace', 'jsonTrace','xml229PhysicalVertexPrefinal','xml229SourceCoordinatePolicy','xml229SourceAttachmentPolicy'];
 
 export function restraintAuditConfig(config = {}) {
-  return clone(Object.fromEntries(configKeys.filter(k => config[k] !== undefined).map(k => [k, config[k]])));
+  const selected=Object.fromEntries(configKeys.filter(k => config[k] !== undefined).map(k => [k, config[k]]));
+  // Bind the effective V1 default into the native source-bound configuration receipt.
+  if(config.xml229PhysicalVertexPrefinal!==true)
+    selected.xml229SourceFieldPrecedence={...(selected.xml229SourceFieldPrecedence||{}),
+      mappedCodes:mappedCodePrecedenceEnabled(config)};
+  return clone(selected);
 }
 
 export function restraintAuditMember(member, decision, reason = 'selected-source-member') {

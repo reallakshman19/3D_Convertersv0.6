@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {assertNativeXml229RestraintReviewClear}
  from '../tabs/xml-cii-2019-standalone/integration/xml229-native-restraint-review-gate.mjs';
 import {recordPreviewRestraintReview,lastPreviewRestraintReview,
- recordPreviewFailure,lastPreviewFailure,showPreviewRestraintStatus}
+ recordPreviewFailure,lastPreviewFailure,showPreviewRestraintStatus,showIndependentRestraintStatus}
  from '../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-preview-failure-notice.js';
 
 const conflicted={
@@ -75,4 +75,15 @@ test('genuine strict Preview error still paints a blocker, independent of quaran
   showPreviewRestraintStatus(panel);
   assert.match(panel.querySelector('[data-preview-blocker]')?.textContent||'',/Preview blocked/);
  }finally{recordPreviewFailure(null);globalThis.document=old;}
+});
+
+test('O1 local clear receipt never inherits an earlier Preview HOLD',()=>{
+ const old=globalThis.document;globalThis.document={createElement:()=>new MockElement()};
+ try{
+  recordPreviewRestraintReview(conflicted);
+  const panel=new MockPanel();
+  showIndependentRestraintStatus(panel,clear);
+  assert.equal(panel.querySelector('[data-preview-restraint-review]'),null);
+  assert.equal(lastPreviewRestraintReview().status,'FOR_REVIEW');
+ }finally{recordPreviewRestraintReview(null);globalThis.document=old;}
 });

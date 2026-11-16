@@ -210,8 +210,24 @@ export function generatedSupportKind(attrs = {}) {
 // Explicit project policy: only the six original source fields may win over
 // a valid governed NODETYPE. No generated label, NAME/SPRE or NODETYPE rule
 // can grant this exception. Use the saved Step 7 priority/match/source rules.
+// Missing policy defaults ON in qualified V1; explicit OFF survives reload.
+// V2 has not qualified this authority: absent remains OFF, explicit ON is rejected by pre-Final.
+export function mappedCodePrecedenceEnabled(config={}) {
+  const value=config.xml229SourceFieldPrecedence?.mappedCodes;
+  return value===true || (value===undefined && config.xml229PhysicalVertexPrefinal!==true);
+}
+export function mappedCodePrecedenceApplies(attrs={},config={}) {
+  return mappedCodePrecedenceEnabled(config) &&
+    (Object.hasOwn(attrs,'NODETYPE_CODES')||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING');
+}
 export function stagedFieldKindDecision(attrs={},config={}) {
-  if(config.xml229SourceFieldPrecedence?.type!==true)return null;
+  const policy=config.xml229SourceFieldPrecedence||{};
+  const mapped=mappedCodePrecedenceApplies(attrs,config);
+  if(!mapped&&policy.type!==true)return null;
+  // Mapped-code precedence is a selected policy, not permission to infer
+  // a code from generated labels or accept an incomplete exporter receipt.
+  if(mapped&&(!text(attrs.SOURCE_NODETYPE)||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)!=='STEP7_SUPPORT_MAPPING'||
+    !Array.isArray(attrs.NODETYPE_CODES)||attrs.NODETYPE_CODES.length!==1))return null;
   const rawNodeType=Object.prototype.hasOwnProperty.call(attrs,'SOURCE_NODETYPE')?text(attrs.SOURCE_NODETYPE):text(attrs.NODETYPE);
   const originalKind=nodeTypeSupportKind({...attrs,NODETYPE:rawNodeType},config);
   if(!originalKind)return null;
@@ -228,14 +244,33 @@ export function stagedFieldKindDecision(attrs={},config={}) {
   const expected={REST:'+Y',GUIDE:'GUI',LINESTOP:'LIM'}[kind];
   if(profile?.xmlTypes?.length!==1||profile.xmlTypes[0]!==expected)
     throw refuse('PREFINAL_RESTRAINT_CONFIG_INVALID','Field precedence requires a single matching governed XML/CII profile type');
+  // Current source rules, not the exporter proposal, confer authority.
+  const generated=text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING';
+  const expectedCode={REST:'14',GUIDE:'8',LINESTOP:'9'}[kind];
+  if(mapped&&text(attrs.NODETYPE_CODES[0])!==expectedCode)return null;
+  if(generated&&(text(attrs.NODETYPE)!==expectedCode||
+     (text(attrs.SUPPORT_EFFECTIVE_NODETYPE)&&text(attrs.SUPPORT_EFFECTIVE_NODETYPE)!==expectedCode)||
+     (attrs.NODETYPE_CODES!=null&&(!Array.isArray(attrs.NODETYPE_CODES)||
+       attrs.NODETYPE_CODES.length!==1||text(attrs.NODETYPE_CODES[0])!==expectedCode))))return null;
   return {kind,source:'explicit-staged-field-precedence',rule:{...receipt.rule,
+    resolutionStatus:'RESOLVED_BY_STEP7_POLICY',
+    proposedNodeType:text(attrs.NODETYPE),exportedRuleId:text(attrs.SUPPORT_MAPPING_RULE_ID),
+    effectiveNodeType:expectedCode,exportedProposalVerified:generated,
     originalKind,originalNodeType:rawNodeType,effectiveXmlType:expected,
-    policy:'xml229SourceFieldPrecedence.type'}};
+    mappedCodes: mapped?[...attrs.NODETYPE_CODES]:null,
+    policy:mapped?'xml229SourceFieldPrecedence.mappedCodes':'xml229SourceFieldPrecedence.type'}};
 }
 
 export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED, observe = null) {
   const preferred=stagedFieldKindDecision(attrs,config);
   if(preferred&&governed.includes(preferred.kind)){observe?.(preferred);return preferred;}
+  // The physical ST/GT conflict branch already holds failed proposals.
+  // Other reclassified members must not fall through to the generated scalar.
+  if(mappedCodePrecedenceApplies(attrs,config)&&text(attrs.SOURCE_NODETYPE)&&
+     (text(attrs.NODETYPE)!==text(attrs.SOURCE_NODETYPE)||
+      !Array.isArray(attrs.NODETYPE_CODES)||attrs.NODETYPE_CODES.length!==1||
+      text(attrs.NODETYPE_CODES[0])!==text(attrs.SOURCE_NODETYPE)))
+    throw refuse('PREFINAL_RESTRAINT_TYPE_AMBIGUOUS','Mapped restraint codes could not be validated against the current Step 7 rule');
   const byNodeType = nodeTypeSupportKind(attrs, config);
   if (byNodeType && governed.includes(byNodeType)) {
     // A user-authored Step 7 row that names this member as another governed

@@ -4,7 +4,8 @@ This deliberately does not copy restraint values out of the Worker snapshot.
 The caller retains the whole-XML comparison after replaying this bounded stage.
 """
 from xml229_support_type_mapper import (owner_rule_kind, node_type_user_row_conflict, mapped_support_kind, configured_support_rule,
-                                         configured_mapper_semantic_conflict, described_kinds, staged_field_kind_decision)
+                                         configured_mapper_semantic_conflict, described_kinds, staged_field_kind_decision,
+                                         mapped_code_precedence_enabled, mapped_code_precedence_applies)
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -116,6 +117,8 @@ def mds_kind_approval(attrs, config, conflict):
 
 
 def field_precedence(config, key):
+    if key == 'mappedCodes':
+        return mapped_code_precedence_enabled(config)
     return (config.get('xml229SourceFieldPrecedence') or {}).get(key) is True
 
 
@@ -181,6 +184,11 @@ def kinds(entries, require, config=None):
         preferred = '' if approval else preferred_kind(a, config, conflict)
         if conflict:
             require(bool(approval or preferred), 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+        elif not preferred and mapped_code_precedence_applies(a,config) and text(a.get('SOURCE_NODETYPE')):
+            codes=a.get('NODETYPE_CODES')
+            original=text(a.get('SOURCE_NODETYPE'))
+            require(text(a.get('NODETYPE'))==original and isinstance(codes,list) and
+                    len(codes)==1 and text(codes[0])==original, 'NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
         node_type_kind = approval or preferred or {'+Y': 'REST', 'GUI': 'GUIDE', 'LIM': 'LINESTOP'}.get(
             node_type_mutation(a, config), '')
         if preferred:
@@ -502,6 +510,10 @@ def verify_prefinal_restraint_config_custody(final, stage, config, require):
     require(isinstance(audit, dict) and isinstance(audit.get('recordedConfig'), dict),
             'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')
     current = {key: config[key] for key in _RESTRAINT_AUDIT_CONFIG_KEYS if key in config}
+    if config.get('xml229PhysicalVertexPrefinal') is not True:
+        current['xml229SourceFieldPrecedence'] = {
+            **(current.get('xml229SourceFieldPrecedence') or {}),
+            'mappedCodes': mapped_code_precedence_enabled(config)}
     recorded = audit['recordedConfig']
     require(current == recorded,
             'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')
@@ -553,7 +565,7 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
     except (ValueError, UnicodeError):
         require(False, 'NATIVE_PREFINAL_RESTRAINT_SOURCE_INVALID')
     if stage['schema'] == 'XML229.PrefinalRestraints.v2':
-        require(not any(field_precedence(config,k) for k in ('type','gap','stiffness','friction')), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_INVALID')
+        require(not any(field_precedence(config,k) for k in ('type','gap','stiffness','friction','mappedCodes')), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_INVALID')
         require(config.get('xml229PhysicalVertexPrefinal') is True and bool(raw.strip()),
                 'NATIVE_PREFINAL_RESTRAINT_MODE_DRIFT')
         from xml229_physical_vertex_prefinal import replay_physical_vertex_prefinal

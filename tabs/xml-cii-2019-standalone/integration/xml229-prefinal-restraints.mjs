@@ -12,6 +12,8 @@ import {materializeXml229PhysicalVertexRestraints} from './xml229-physical-verte
 import {recordXml229AttachmentDelegation} from './xml229-source-attachment-policy.mjs';
 import {migrateSupportMappingConfig} from '../../../converters/xml-cii2019-core/support-mapping-config.js';
 
+import {mappedCodePrecedenceEnabled} from '../../../converters/xml-cii2019-core/support-kind-precedence.js';
+
 const local=n=>String(n?.localName||n?.nodeName||'').replace(/^.*:/,'');
 const elements=n=>[...(n?.childNodes||[])].filter(x=>x.nodeType===1);
 function sourceShape(node){
@@ -78,7 +80,21 @@ export async function prepareXml229PrefinalRestraints({
   const restraintAudit=await bindRestraintAudit(
     recordXml229AttachmentDelegation(completeRestraintAudit(captured,before,document,config),vertex,document),
     {xmlText,stagedJsonText,config,preparedXmlText:new XMLSerializer().serializeToString(document)});
+  const decisions=(restraintAudit.evaluations||[]).filter(row=>
+    row.source?.decision?.source==='explicit-staged-field-precedence');
+  const policySummary=Object.freeze({
+    flags:Object.fromEntries(['type','gap','stiffness','friction','mappedCodes'].map(key=>[key,key==='mappedCodes'?mappedCodePrecedenceEnabled(config):config.xml229SourceFieldPrecedence?.[key]===true])),
+    savedGaps:Object.fromEntries(['REST','GUIDE','LINESTOP'].map(kind=>[kind,config.supportMapping?.kindProfiles?.[kind]?.gap??null])),
+    typeDecisionOccurrences:decisions.length,
+    mappedCodeDecisionOccurrences:decisions.filter(row=>row.source.decision.rule?.policy==='xml229SourceFieldPrecedence.mappedCodes').length,
+    uniqueTypeDecisionMembers:new Set(decisions.map(row=>row.source.path).filter(Boolean)).size,
+    warningReasons:Object.freeze(warnings.reduce((out,row)=>{const key=row.resolutionReason||row.code;out[key]=(out[key]||0)+1;return out;},{})),
+    authority:'CURRENT_STEP7_CONFIG',
+    configSha256:restraintAudit.basis.configSha256,
+  });
   const restraintReview=Object.freeze({
+    sourceBasis:Object.freeze({xmlSha256:restraintAudit.basis.xmlSha256,jsonSha256:restraintAudit.basis.jsonSha256}),
+    policySummary,
     schema:'XML229.PreviewRestraintReview.v1',
     status:warnings.length?'FOR_REVIEW':'CLEAR',
     engineeringRestraintAcceptance:warnings.length?'HOLD':'NOT_ASSESSED',
