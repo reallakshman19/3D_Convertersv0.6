@@ -85,6 +85,10 @@ for(const [name,type,kind,gap,source] of [['/SYNTH-SL.1.3','8','GUIDE','10','CMP
   ['/SYNTH-SL.3.1','8','GUIDE','12','STEP7_KIND_PROFILE'],['/SYNTH-SL.3.2','9','LINESTOP','25','STEP7_KIND_PROFILE']]){
   const a=members.get(name);assert.ok(a,'Full member identity was not preserved');
   assert.equal(a.NODETYPE,type);assert.equal(a.SOURCE_NODETYPE,'14');
+  assert.equal(a.SUPPORT_EFFECTIVE_NODETYPE,type);
+  assert.equal(a.SUPPORT_MAPPING_STATUS,
+    type==='14'?'MAPPED':'FOR_REVIEW_SOURCE_NODETYPE_CORRECTED');
+  assert.equal(a.SUPPORT_MAPPING_REQUIRES_ENGINEERING_APPROVAL,type!=='14');
   assert.equal(a.SOURCE_NODEGAP,'0');assert.equal(a.SUPPORT_EFFECTIVE_GAP,gap);
   assert.equal(a.SUPPORT_GAP_SOURCE,source);
   for(const k of ['SUPPORT_KIND','SUPPORT_TYPE','SUPPORT_MAPPER_KIND'])assert.equal(a[k],kind);
