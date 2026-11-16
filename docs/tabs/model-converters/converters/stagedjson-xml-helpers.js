@@ -249,27 +249,28 @@ function _expandRmssChildToPsiXmlNodes(child, componentRefNo, defaults) {
 
 export function _buildPsiXmlFromRmssHierarchy(hierarchy, inputName, options) {
   const normalizedHierarchy = Array.isArray(hierarchy) ? hierarchy : [];
-  let correctedMdsNodeTypes = 0;
+  let supportMapperStats;
   if (options?.normalizeAttRvmMdsMembers === true) {
+    supportMapperStats={scanned:0,mapped:0,correctedMdsNodeTypes:0,forReview:0};
     const visit = nodes => {
       for (const node of nodes || []) {
         if (!node) continue;
         const attrs = node.attributes;
         const type = _toText(node.type || attrs?.TYPE).trim().toUpperCase();
         if (attrs && ['SUPPORT', 'ANCI', 'ATTA'].includes(type)) {
-          const before = attrs.NODETYPE;
-          normalizeAttRvmMdsMember(attrs);
-          if (attrs.NODETYPE !== before) correctedMdsNodeTypes++;
+          supportMapperStats.scanned++;
+          const before=attrs.NODETYPE;
+          const kind=normalizeAttRvmMdsMember(attrs,options.attRvmSupportConfig,options.attRvmSource || 'ATT');
+          if (kind) supportMapperStats.mapped++;
+          if (attrs.NODETYPE!==before) supportMapperStats.correctedMdsNodeTypes++;
+          if (_toText(attrs.SUPPORT_MAPPING_STATUS).startsWith('FOR_REVIEW')) supportMapperStats.forReview++;
         }
         for (const key of ['children', 'items', 'branches'])
           if (Array.isArray(node[key])) visit(node[key]);
       }
     };
     visit(normalizedHierarchy);
-  }
-  const supportMapperStats = enrichHierarchyWithMapperKinds(normalizedHierarchy);
-  if (options?.normalizeAttRvmMdsMembers === true)
-    supportMapperStats.correctedMdsNodeTypes = correctedMdsNodeTypes;
+  } else supportMapperStats=enrichHierarchyWithMapperKinds(normalizedHierarchy);
   const branches = normalizedHierarchy.filter((entry) => entry && Array.isArray(entry.children) && entry.children.length > 0);
   if (!branches.length) {
     throw new Error('ATT/TXT parser returned no branch topology. Cannot generate XML.');
