@@ -94,12 +94,12 @@ export function showRestraintPolicySummary(panel,receipt){
  const status=document.createElement('p');
  status.dataset.restraintPolicySummary='true';
  status.setAttribute('role','status');
- const flags=['type','gap','stiffness','friction'].map(k=>k+': '+(p.flags?.[k]?'ON':'OFF')).join(' | ');
+ const flags=['type','gap','stiffness','friction','mappedCodes'].map(k=>k+': '+(p.flags?.[k]?'ON':'OFF')).join(' | ');
  const gaps=['REST','GUIDE','LINESTOP'].map(k=>k+' '+(p.savedGaps?.[k]??'not saved')).join(', ');
  const reasons=Object.entries(p.warningReasons||{}).map(([k,v])=>k+': '+v).join(' | ');
  status.textContent='Effective Step 7 policy — '+flags+'. Saved gaps (mm): '+gaps+
    '. RESOLVED_BY_STEP7_POLICY: '+p.typeDecisionOccurrences+' type decisions / '+p.uniqueTypeDecisionMembers+
-   ' distinct source members. '+(reasons?'Remaining review reasons: '+reasons+'. ':'')+
+   ' distinct source members. Mapped-code decisions: '+(p.mappedCodeDecisionOccurrences||0)+'. '+(reasons?'Remaining review reasons: '+reasons+'. ':'')+
    'Config SHA-256: '+p.configSha256+'. Not engineering approval.';
  panel.append(status);
 }

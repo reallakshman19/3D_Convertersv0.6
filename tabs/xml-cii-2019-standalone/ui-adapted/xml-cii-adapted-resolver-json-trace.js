@@ -1,4 +1,6 @@
 import { createElement, appendLabeledControl } from './xml-cii-adapted-dom.js';
+import { saveMasterContextToLocalStorage,updateWorkflowState } from './xml-cii-adapted-state.js?v=20261001-weight-output-2';
+import { recordPreviewRestraintReview,recordPreviewFailure } from './xml-cii-adapted-preview-failure-notice.js';
 import { buildAdaptedJsonTraceTree } from './xml-cii-adapted-regex-results.js';
 import { renderStandaloneTraceTableImportPanel } from './xml-cii-adapted-table-trace-panel.js';
 import {
@@ -365,6 +367,34 @@ function renderResolverIndex(parent, state, stateRef, render, scopeState) {
   parent.appendChild(section);
 }
 
+export function renderMappedCodePrecedence(parent,stateRef,render){
+  const state=stateRef.current;
+  let config;
+  try{config=JSON.parse(state.supportConfigJson||'{}');}catch{return;}
+  const section=createElement('section','','xml-cii-resolver-panel');
+  section.appendChild(createElement('h3','Mapped restraint code precedence'));
+  const input=appendLabeledControl(section,
+    'In case of conflict, NODETYPE_CODES wins over SOURCE_CODES (original SOURCE_NODETYPE).',createElement('input'));
+  input.type='checkbox';input.checked=config.xml229SourceFieldPrecedence?.mappedCodes===true;
+  input.dataset.field='xml229-source-field-precedence-mapped-codes';
+  input.disabled=config.xml229PhysicalVertexPrefinal===true;
+  section.appendChild(createElement('p',
+    'Applies to original staged members with a single verified Step 7 mapped code (8 GUIDE, 9 LINESTOP, 14 REST). Original source codes stay in the audit. Current enabled Step 7 rules and the exported NODETYPE must agree; invalid or composite codes remain for review. This is independent of the Step 7 Type checkbox. Gapless supports still require the Gap precedence checkbox and an appropriate saved profile gap. Rebuild O1 and Preview after changing this setting.','xml-cii-phase-help'));
+  input.addEventListener('change',()=>{
+    const current=stateRef.current;
+    let next;
+    try{next=JSON.parse(current.supportConfigJson||'{}');}catch{return;}
+    if(next.xml229PhysicalVertexPrefinal===true)return;
+    next={...next,xml229SourceFieldPrecedence:{...(next.xml229SourceFieldPrecedence||{}),mappedCodes:input.checked}};
+    const masterContext=current.masterContext?{...current.masterContext,config:next}:current.masterContext;
+    stateRef.current=updateWorkflowState(current,{supportConfigJson:JSON.stringify(next,null,2),masterContext});
+    if(stateRef.current.masterContext)saveMasterContextToLocalStorage(stateRef.current.masterContext);
+    recordPreviewRestraintReview(null);recordPreviewFailure(null);
+    if(typeof render==='function')render();
+  });
+  parent.appendChild(section);
+}
+
 function renderJsonConfig(parent, state) {
   const section = createElement('section', '', 'xml-cii-resolver-panel');
   section.appendChild(createElement('h3', 'JSON Config'));
@@ -494,6 +524,7 @@ export function renderStandaloneResolverJsonTracePanel(card, state, stateRef, re
 
   const workspace = createElement('div', '', 'xml-cii-sub-workspace');
   if (subTabId === 'index') {
+    renderMappedCodePrecedence(workspace,stateRef,render);
     renderResolverIndex(workspace, state, stateRef, render, scopeState);
     renderJsonConfig(workspace, state);
   } else if (subTabId === 'tableImport') {

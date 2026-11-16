@@ -81,9 +81,10 @@ export async function prepareXml229PrefinalRestraints({
   const decisions=(restraintAudit.evaluations||[]).filter(row=>
     row.source?.decision?.source==='explicit-staged-field-precedence');
   const policySummary=Object.freeze({
-    flags:Object.fromEntries(['type','gap','stiffness','friction'].map(key=>[key,config.xml229SourceFieldPrecedence?.[key]===true])),
+    flags:Object.fromEntries(['type','gap','stiffness','friction','mappedCodes'].map(key=>[key,config.xml229SourceFieldPrecedence?.[key]===true])),
     savedGaps:Object.fromEntries(['REST','GUIDE','LINESTOP'].map(kind=>[kind,config.supportMapping?.kindProfiles?.[kind]?.gap??null])),
     typeDecisionOccurrences:decisions.length,
+    mappedCodeDecisionOccurrences:decisions.filter(row=>row.source.decision.rule?.policy==='xml229SourceFieldPrecedence.mappedCodes').length,
     uniqueTypeDecisionMembers:new Set(decisions.map(row=>row.source.path).filter(Boolean)).size,
     warningReasons:Object.freeze(warnings.reduce((out,row)=>{const key=row.resolutionReason||row.code;out[key]=(out[key]||0)+1;return out;},{})),
     authority:'CURRENT_STEP7_CONFIG',

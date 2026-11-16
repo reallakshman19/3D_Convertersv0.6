@@ -211,7 +211,14 @@ export function generatedSupportKind(attrs = {}) {
 // a valid governed NODETYPE. No generated label, NAME/SPRE or NODETYPE rule
 // can grant this exception. Use the saved Step 7 priority/match/source rules.
 export function stagedFieldKindDecision(attrs={},config={}) {
-  if(config.xml229SourceFieldPrecedence?.type!==true)return null;
+  const policy=config.xml229SourceFieldPrecedence||{};
+  const mapped=policy.mappedCodes===true&&
+    (Object.hasOwn(attrs,'NODETYPE_CODES')||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING');
+  if(!mapped&&policy.type!==true)return null;
+  // Mapped-code precedence is an explicit opt-in, not permission to infer
+  // a code from generated labels or accept an incomplete exporter receipt.
+  if(mapped&&(!text(attrs.SOURCE_NODETYPE)||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)!=='STEP7_SUPPORT_MAPPING'||
+    !Array.isArray(attrs.NODETYPE_CODES)||attrs.NODETYPE_CODES.length!==1))return null;
   const rawNodeType=Object.prototype.hasOwnProperty.call(attrs,'SOURCE_NODETYPE')?text(attrs.SOURCE_NODETYPE):text(attrs.NODETYPE);
   const originalKind=nodeTypeSupportKind({...attrs,NODETYPE:rawNodeType},config);
   if(!originalKind)return null;
@@ -231,6 +238,7 @@ export function stagedFieldKindDecision(attrs={},config={}) {
   // Current source rules, not the exporter proposal, confer authority.
   const generated=text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING';
   const expectedCode={REST:'14',GUIDE:'8',LINESTOP:'9'}[kind];
+  if(mapped&&text(attrs.NODETYPE_CODES[0])!==expectedCode)return null;
   if(generated&&(text(attrs.NODETYPE)!==expectedCode||
      (text(attrs.SUPPORT_EFFECTIVE_NODETYPE)&&text(attrs.SUPPORT_EFFECTIVE_NODETYPE)!==expectedCode)||
      (attrs.NODETYPE_CODES!=null&&(!Array.isArray(attrs.NODETYPE_CODES)||
@@ -240,7 +248,8 @@ export function stagedFieldKindDecision(attrs={},config={}) {
     proposedNodeType:text(attrs.NODETYPE),exportedRuleId:text(attrs.SUPPORT_MAPPING_RULE_ID),
     effectiveNodeType:expectedCode,exportedProposalVerified:generated,
     originalKind,originalNodeType:rawNodeType,effectiveXmlType:expected,
-    policy:'xml229SourceFieldPrecedence.type'}};
+    mappedCodes: mapped?[...attrs.NODETYPE_CODES]:null,
+    policy:mapped?'xml229SourceFieldPrecedence.mappedCodes':'xml229SourceFieldPrecedence.type'}};
 }
 
 export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED, observe = null) {

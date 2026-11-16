@@ -553,7 +553,7 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
     except (ValueError, UnicodeError):
         require(False, 'NATIVE_PREFINAL_RESTRAINT_SOURCE_INVALID')
     if stage['schema'] == 'XML229.PrefinalRestraints.v2':
-        require(not any(field_precedence(config,k) for k in ('type','gap','stiffness','friction')), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_INVALID')
+        require(not any(field_precedence(config,k) for k in ('type','gap','stiffness','friction','mappedCodes')), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_INVALID')
         require(config.get('xml229PhysicalVertexPrefinal') is True and bool(raw.strip()),
                 'NATIVE_PREFINAL_RESTRAINT_MODE_DRIFT')
         from xml229_physical_vertex_prefinal import replay_physical_vertex_prefinal

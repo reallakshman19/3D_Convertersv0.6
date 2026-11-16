@@ -685,7 +685,14 @@ def owner_rule_kind(attrs, config, governed=('REST', 'GUIDE', 'LINESTOP')):
 
 def staged_field_kind_decision(attrs, config, original_kind):
     """Explicit source-field precedence; no generated labels or NODETYPE rule."""
-    if (config.get('xml229SourceFieldPrecedence') or {}).get('type') is not True or not original_kind:
+    policy = config.get('xml229SourceFieldPrecedence') or {}
+    mapped = policy.get('mappedCodes') is True and ('NODETYPE_CODES' in attrs or
+        str(attrs.get('NODETYPE_CLASSIFICATION_SOURCE') or '').strip() == 'STEP7_SUPPORT_MAPPING')
+    if (not mapped and policy.get('type') is not True) or not original_kind:
+        return ''
+    if mapped and (not str(attrs.get('SOURCE_NODETYPE') or '').strip() or
+        str(attrs.get('NODETYPE_CLASSIFICATION_SOURCE') or '').strip() != 'STEP7_SUPPORT_MAPPING' or
+        not isinstance(attrs.get('NODETYPE_CODES'),list) or len(attrs['NODETYPE_CODES'])!=1):
         return ''
     evidence = {k:v for k,v in _owner_fields(attrs).items()
                 if k in ('SKEY','DESCRIPTION','DESC','CMPSUPTYPE','DTXR','MDSSUPPTYPE')}
@@ -712,7 +719,7 @@ def staged_field_kind_decision(attrs, config, original_kind):
         proposal = str(attrs.get('NODETYPE') or '').strip()
         effective = str(attrs.get('SUPPORT_EFFECTIVE_NODETYPE') or '').strip()
         codes = attrs.get('NODETYPE_CODES')
-        if (proposal != expected_code or (effective and effective != expected_code) or
+        if (mapped and str(codes[0]).strip()!=expected_code) or (proposal != expected_code or (effective and effective != expected_code) or
                 (codes is not None and (not isinstance(codes,list) or len(codes)!=1 or
                  str(codes[0]).strip()!=expected_code))):
             return ''
