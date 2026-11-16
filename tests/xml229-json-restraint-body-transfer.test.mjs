@@ -33,9 +33,8 @@ const stage=(xmlText=XML,source=staged(),cfg=config)=>prepareXml229PrefinalRestr
 test('original JSON REST/GUIDE/LINESTOP and numeric gaps precede fallback; zero friction survives',async()=>{
  const r=await stage();
  assert.deepEqual(rows(r.document).slice(2).map(r=>r.restraints),[
- // Selected source REST retains the explicit global legacy default; the
- // independent ATTA fallback uses source-owned zero when no gap exists.
- [['+Y','7','0']],[['GUI','6','-1.010100']],[['LIM','8','-1.010100']],[['+Y','0','0']],
+ // Neither selected REST nor unmatched ATTA may infer clearance from global defaultGap.
+ [['+Y','0','0']],[['GUI','6','-1.010100']],[['LIM','8','-1.010100']],[['+Y','0','0']],
  ]);
  assert.equal(r.proof.originalJsonSha256,await digestUtf8(JSON.stringify(staged())));
 });
