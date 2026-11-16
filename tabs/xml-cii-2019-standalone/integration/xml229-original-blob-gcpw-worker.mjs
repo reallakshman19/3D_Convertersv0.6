@@ -50,6 +50,7 @@ import {exportXml229SourceBoundReviewBackup,restoreXml229SourceBoundReviewBackup
  from './xml229-source-weight-review-transfer.mjs';
 
 import {resolveXml229ReviewSourceInput} from './xml229-review-source-input.mjs';
+import {assertNativeXml229RestraintReviewClear} from './xml229-native-restraint-review-gate.mjs';
 installWeightBasisXmlDom(globalThis);
 const PROTOCOL='XML229.P4.WorkerHeldOriginalJsonGC-PW.v1';
 const MAX_ORIGINAL_COUNT=250000,MAX_PHYSICAL=10000;
@@ -298,8 +299,7 @@ async function rpc(req){
      });
    }
    if(req.what==='native-final-intent'){
-     if(restraintReview?.engineeringRestraintAcceptance==='HOLD')
-       fail('NATIVE_RESTRAINT_REVIEW_HOLD','Unresolved source restraint kinds require engineering approval before Final');
+     assertNativeXml229RestraintReviewClear(restraintReview);
      return commitXml229NativeFinalIntent(ready,{
        ...(sourceReceipt.schema==='XML229.XmlOnlyReviewSource.v1'?{reviewSourceKind:'XML_ONLY',sourceXmlSha256:ready.basis.sourceRefs[0].sha256}:{}),
        originalJsonSha256:sourceReceipt.sha256,
@@ -307,8 +307,7 @@ async function rpc(req){
      });
    }
    if(req.what==='native-final-packet'){
-     if(restraintReview?.engineeringRestraintAcceptance==='HOLD')
-       fail('NATIVE_RESTRAINT_REVIEW_HOLD','Unresolved source restraint kinds require engineering approval before Final');
+     assertNativeXml229RestraintReviewClear(restraintReview);
      // Private Worker-owned weight input to the native converter. This is
      // actual accepted Source/Final mass, never candidate or localStorage.
      const intent=await commitXml229NativeFinalIntent(ready,{
