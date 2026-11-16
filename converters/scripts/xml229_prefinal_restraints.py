@@ -353,12 +353,16 @@ def node_type_mutation(attrs, config):
                 break
     return present_type(str(value))
 
-def append_profile(node, kind, attrs, config, allowed=None):
+def append_profile(node, kind, attrs, config, allowed=None, *, selected_source=False):
     p = profile_for(kind, config)
     ns = node.tag.rsplit('}', 1)[0] + '}' if '}' in node.tag else ''
     d = direction(p, attrs, node)
     raw = source_gap(attrs)
-    require_gap = numeric(raw) if raw else 0
+    # V1 MDS selected REST retains its explicit legacy global defaultGap
+    # when the member has no clearance. A generic/ATTA fallback and V2 slot
+    # remain source-gap owned (zero if absent), as in the JS producer.
+    legacy_rest_gap = text(config.get('defaultGap')) if selected_source and kind == 'REST' else ''
+    require_gap = numeric(raw) if raw else numeric(legacy_rest_gap) if legacy_rest_gap else 0
     if require_gap is None or not math.isfinite(require_gap):
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
     gap = str(require_gap)
@@ -455,6 +459,9 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
     require(isinstance(stage, dict) and stage.get('schema') in (
         'XML229.PrefinalRestraints.v1', 'XML229.PrefinalRestraints.v2'),
             'NATIVE_PREFINAL_RESTRAINT_STAGE_INVALID')
+    require(stage.get('engineeringRestraintAcceptance') != 'HOLD' and
+            not (stage.get('restraintAudit') or {}).get('warnings'),
+            'NATIVE_PREFINAL_RESTRAINT_REVIEW_HOLD')
     raw = staged_json_path.read_bytes() if staged_json_path is not None else b''
     sha = hashlib.sha256(raw).hexdigest()
     require(stage.get('originalJsonSha256') == sha and
@@ -499,7 +506,7 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
             present = {present_type(field(r, 'Type')) for r in children(node, 'Restraint')}
             for kind in ('REST', 'GUIDE', 'LINESTOP'):
                 if kind in evidence:
-                    append_profile(node, kind, evidence[kind], config, present)
+                    append_profile(node, kind, evidence[kind], config, present, selected_source=True)
         rows = children(node, 'Restraint')
         if typ == 'ATTA' and (not rows or all(map(placeholder, rows))):
             for r in rows:
