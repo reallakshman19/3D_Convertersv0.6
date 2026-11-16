@@ -200,7 +200,17 @@ export function normalizeAttRvmMdsMember(attrs = {}, config = {}, source = 'ATT'
   attrs.SUPPORT_MAPPING_RULE_ID=decision.rule.id;
   attrs.SUPPORT_MAPPING_RULE_PRIORITY=String(decision.rule.priority);
   attrs.SUPPORT_MAPPING_RULE_FIELD=decision.rule.matchEvidence.sourceField;
-  attrs.SUPPORT_MAPPING_STATUS='MAPPED';
+  // Correct the generated XML/JSON type at ATT/RVM export, but never claim a
+  // conflicting original NODETYPE has already received engineering approval.
+  // Preserve both raw and effective types so O1/Preview can quarantine and
+  // strict Final can demand an exact source-bound decision.
+  const rawSourceType=text(attrs.SOURCE_NODETYPE);
+  const reclassified=!!rawSourceType && (codes.length!==1 ||
+    rawSourceType!==String(codes[0]));
+  attrs.SUPPORT_EFFECTIVE_NODETYPE=codes.length===1?String(codes[0]):'';
+  attrs.SUPPORT_MAPPING_STATUS=reclassified
+    ?'FOR_REVIEW_SOURCE_NODETYPE_CORRECTED':'MAPPED';
+  attrs.SUPPORT_MAPPING_REQUIRES_ENGINEERING_APPROVAL=reclassified;
   attrs.SUPPORT_KIND=attrs.SUPPORT_TYPE=attrs.SUPPORT_MAPPER_KIND=kind;
   // Retain original catalogue gaps, including explicit zero; materialize the
   // selected profile default only when no independent clearance is supplied.
