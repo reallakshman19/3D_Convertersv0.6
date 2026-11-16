@@ -4,7 +4,7 @@ This deliberately does not copy restraint values out of the Worker snapshot.
 The caller retains the whole-XML comparison after replaying this bounded stage.
 """
 from xml229_support_type_mapper import (owner_rule_kind, node_type_user_row_conflict, mapped_support_kind, configured_support_rule,
-                                         configured_mapper_semantic_conflict)
+                                         configured_mapper_semantic_conflict, described_kinds)
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -117,6 +117,18 @@ def mds_kind_approval(attrs, config, conflict):
 def kinds(entries, require, config=None):
     config = config or {}
     out = {}
+    # Two staged rows asserting different NODETYPE for one exact physical
+    # NAME are not two independent restraints; the same member is ambiguous.
+    by_name = {}
+    for entry in entries:
+        attrs = entry.get('attrs') or {}
+        name = text(attrs.get('NAME')).upper()
+        raw_type = text(attrs.get('NODETYPE'))
+        if name and raw_type:
+            prior = by_name.get(name)
+            require(not (prior and prior != raw_type),
+                    'NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
+            by_name[name] = raw_type
     for e in entries:
         a = e['attrs']
         # Owner rule (12 Nov, RCA-04): the source NODETYPE (after the 8 Config
@@ -328,6 +340,12 @@ def node_type_mutation(attrs, config):
                 # label contradicts its target (legacy "LIM 7 -> 8") is refused.
                 expected = {'+Y': '14', 'GUI': '8', 'LIM': '9'}.get(text(label).upper())
                 if expected and text(target) != expected:
+                    raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+                # A user-authored mutation from a non-governed CAESAR type
+                # into REST/GUI/LIM cannot contradict an explicit source DTXR.
+                target_kind = {'14':'REST','8':'GUIDE','9':'LINESTOP'}.get(text(target))
+                explicit = described_kinds(attrs)
+                if target_kind and len(explicit) == 1 and explicit[0] != target_kind:
                     raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
                 if not re.fullmatch(r'[0-9]+', text(target)) or not 1 <= int(target) <= 62:
                     raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_INVALID')
