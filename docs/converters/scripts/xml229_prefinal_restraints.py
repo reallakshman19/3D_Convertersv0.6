@@ -4,7 +4,8 @@ This deliberately does not copy restraint values out of the Worker snapshot.
 The caller retains the whole-XML comparison after replaying this bounded stage.
 """
 from xml229_support_type_mapper import (owner_rule_kind, node_type_user_row_conflict, mapped_support_kind, configured_support_rule,
-                                         configured_mapper_semantic_conflict, described_kinds, staged_field_kind_decision)
+                                         configured_mapper_semantic_conflict, described_kinds, staged_field_kind_decision,
+                                         mapped_code_precedence_enabled, mapped_code_precedence_applies)
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
@@ -116,6 +117,8 @@ def mds_kind_approval(attrs, config, conflict):
 
 
 def field_precedence(config, key):
+    if key == 'mappedCodes':
+        return mapped_code_precedence_enabled(config)
     return (config.get('xml229SourceFieldPrecedence') or {}).get(key) is True
 
 
@@ -181,8 +184,7 @@ def kinds(entries, require, config=None):
         preferred = '' if approval else preferred_kind(a, config, conflict)
         if conflict:
             require(bool(approval or preferred), 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
-        elif not preferred and field_precedence(config,'mappedCodes') and text(a.get('SOURCE_NODETYPE')) and (
-                'NODETYPE_CODES' in a or text(a.get('NODETYPE_CLASSIFICATION_SOURCE'))=='STEP7_SUPPORT_MAPPING'):
+        elif not preferred and mapped_code_precedence_applies(a,config) and text(a.get('SOURCE_NODETYPE')):
             codes=a.get('NODETYPE_CODES')
             original=text(a.get('SOURCE_NODETYPE'))
             require(text(a.get('NODETYPE'))==original and isinstance(codes,list) and
@@ -508,6 +510,10 @@ def verify_prefinal_restraint_config_custody(final, stage, config, require):
     require(isinstance(audit, dict) and isinstance(audit.get('recordedConfig'), dict),
             'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')
     current = {key: config[key] for key in _RESTRAINT_AUDIT_CONFIG_KEYS if key in config}
+    if config.get('xml229PhysicalVertexPrefinal') is not True:
+        current['xml229SourceFieldPrecedence'] = {
+            **(current.get('xml229SourceFieldPrecedence') or {}),
+            'mappedCodes': mapped_code_precedence_enabled(config)}
     recorded = audit['recordedConfig']
     require(current == recorded,
             'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')

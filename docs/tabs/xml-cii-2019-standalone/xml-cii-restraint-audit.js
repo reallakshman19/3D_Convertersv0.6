@@ -1,6 +1,8 @@
 /** Private run evidence. Records existing decisions; never classifies or writes restraints. */
 import {digestCanonical, digestUtf8} from '../../contracts/gc-pw-v1/contract.mjs';
 
+import {mappedCodePrecedenceEnabled} from '../../converters/xml-cii2019-core/support-kind-precedence.js';
+
 export const RESTRAINT_AUDIT_SCHEMA = 'XML229.RestraintAudit.v1';
 const local = n => String(n?.localName || n?.nodeName || '').replace(/^.*:/, '');
 const children = (n, tag) => [...(n?.childNodes || [])].filter(c => c.nodeType === 1 && local(c) === tag);
@@ -22,7 +24,12 @@ const configKeys = ['supportMapping', 'supportTypeMapper', 'inputXmlRestraintTyp
   'dtxrCoordinateToleranceMm', 'coordinateTolerance', 'resolverJsonTrace', 'jsonTrace','xml229PhysicalVertexPrefinal','xml229SourceCoordinatePolicy','xml229SourceAttachmentPolicy'];
 
 export function restraintAuditConfig(config = {}) {
-  return clone(Object.fromEntries(configKeys.filter(k => config[k] !== undefined).map(k => [k, config[k]])));
+  const selected=Object.fromEntries(configKeys.filter(k => config[k] !== undefined).map(k => [k, config[k]]));
+  // Bind the effective V1 default into the native source-bound configuration receipt.
+  if(config.xml229PhysicalVertexPrefinal!==true)
+    selected.xml229SourceFieldPrecedence={...(selected.xml229SourceFieldPrecedence||{}),
+      mappedCodes:mappedCodePrecedenceEnabled(config)};
+  return clone(selected);
 }
 
 export function restraintAuditMember(member, decision, reason = 'selected-source-member') {

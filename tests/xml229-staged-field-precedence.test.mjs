@@ -16,8 +16,8 @@ const input=()=>[{type:'BRANCH',name:branch,children:[
  member('/SL-SYNTH.1.1','PIPE-REST','PIPE-REST','REST','GAP=0mm'),
  member('/SL-SYNTH.1.2','ST','ST501','LS-S2-3','GAP=35mm'),
  member('/SL-SYNTH.1.3','GT','GT500','PG-S-3','GAP=10mm')]}];
-const cfg={dtxrPositionOffset:{enabled:true,xOffset:0,yOffset:0,zOffset:0},resolverJsonTrace:{matchMode:'POS',coordinateTolerance:6},defaultStiffness:'123456',defaultFriction:'0.3'};
-const all={...cfg,xml229SourceFieldPrecedence:{type:true,gap:true,stiffness:true,friction:true}};
+const cfg={xml229SourceFieldPrecedence:{mappedCodes:false},dtxrPositionOffset:{enabled:true,xOffset:0,yOffset:0,zOffset:0},resolverJsonTrace:{matchMode:'POS',coordinateTolerance:6},defaultStiffness:'123456',defaultFriction:'0.3'};
+const all={...cfg,xml229SourceFieldPrecedence:{mappedCodes:false,type:true,gap:true,stiffness:true,friction:true}};
 all.supportMapping=migrateSupportMappingConfig(all);
 all.supportMapping.kindProfiles.GUIDE.gap='12';
 all.supportMapping.kindProfiles.LINESTOP.stiffness='777';
@@ -209,13 +209,17 @@ test('real JSON Trace checkbox writes the shared support config and persists its
    let renders=0;const panel=new MiniElement('section');
    renderMappedCodePrecedence(panel,ref,()=>renders++);
    const checkbox=panel.querySelector('[data-field="xml229-source-field-precedence-mapped-codes"]');
-   assert.ok(checkbox);assert.equal(checkbox.checked,false);
+   assert.ok(checkbox);assert.equal(checkbox.checked,true);
    checkbox.checked=true;checkbox.dispatch('change');
    assert.equal(JSON.parse(ref.current.supportConfigJson).xml229SourceFieldPrecedence.mappedCodes,true);
    assert.equal(JSON.parse(store.get('xml-cii-import-masters-v1')).config.xml229SourceFieldPrecedence.mappedCodes,true);
    assert.equal(renders,1);
    checkbox.checked=false;checkbox.dispatch('change');
    assert.equal(JSON.parse(ref.current.supportConfigJson).xml229SourceFieldPrecedence.mappedCodes,false);
+    const restored={current:createXmlCiiAdaptedWorkflowState()};
+    const restoredPanel=new MiniElement('section');
+    renderMappedCodePrecedence(restoredPanel,restored,()=>{});
+    assert.equal(restoredPanel.querySelector('[data-field="xml229-source-field-precedence-mapped-codes"]').checked,false);
  }finally{
    globalThis.document=oldDoc;
    Object.defineProperty(globalThis,'localStorage',{configurable:true,value:oldStorage});
@@ -231,4 +235,24 @@ test('failed mapped proposal cannot fall through to generated scalar outside phy
  assert.equal(review.restraintReview.status,'FOR_REVIEW');
  await assert.rejects(stage(source,config),{code:'PREFINAL_RESTRAINT_TYPE_AMBIGUOUS'});
  assert.throws(()=>native(source,config),/NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS/);
+});
+
+test('mapped codes default ON in V1, explicit OFF persists, V2 default remains unqualified',async()=>{
+ const source=regenerated(),before=JSON.stringify(source);
+ const config={...cfg,supportMapping:all.supportMapping};
+ delete config.xml229SourceFieldPrecedence;
+ const result=await stage(source,config,'preview');
+ assert.equal(result.restraintReview.status,'CLEAR');
+ assert.equal(result.restraintReview.policySummary.flags.mappedCodes,true);
+ assert.equal(result.restraintReview.policySummary.flags.type,false);
+ assert.equal(result.restraintReview.policySummary.mappedCodeDecisionOccurrences,2);
+ assert.equal(result.proof.restraintAudit.recordedConfig.xml229SourceFieldPrecedence.mappedCodes,true);
+ assert.deepEqual(numericRows(rows(result.document)),numericRows(native(source,config)));
+ assert.equal(JSON.stringify(source),before);
+ const off={...config,xml229SourceFieldPrecedence:{mappedCodes:false}};
+ assert.equal((await stage(source,off,'preview')).restraintReview.status,'FOR_REVIEW');
+ assert.throws(()=>native(source,off),/NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT/);
+ const {mappedCodePrecedenceEnabled}=await import('../converters/xml-cii2019-core/support-kind-precedence.js');
+ assert.equal(mappedCodePrecedenceEnabled({xml229PhysicalVertexPrefinal:true}),false);
+ assert.equal(mappedCodePrecedenceEnabled({xml229PhysicalVertexPrefinal:true,xml229SourceFieldPrecedence:{mappedCodes:true}}),true);
 });

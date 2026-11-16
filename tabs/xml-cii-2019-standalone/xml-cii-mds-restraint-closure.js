@@ -3,7 +3,7 @@ import {
   restraintEntriesFromSupportKind,sourceSupportGap,preferredStagedScalar,
 } from '../../converters/xml-cii2019-core/support-mapping.js';
 import { migrateSupportMappingConfig } from '../../converters/xml-cii2019-core/support-mapping-config.js';
-import { governedSupportKind, stagedFieldKindDecision, SUPPORT_KIND_EVIDENCE_FIELDS } from '../../converters/xml-cii2019-core/support-kind-precedence.js';
+import { governedSupportKind, stagedFieldKindDecision, mappedCodePrecedenceApplies, SUPPORT_KIND_EVIDENCE_FIELDS } from '../../converters/xml-cii2019-core/support-kind-precedence.js';
 import {mutateRestraintType} from '../../converters/xml-cii2019-core/restraint-type-mutation.js';
 import {identifyXml229MdsKindConflict, approvedXml229MdsKindResolution,
   isQuarantinableXml229RestraintError, xml229RestraintConflictError}
@@ -176,7 +176,7 @@ function supportKindFromMember(member,config={},observe=null) {
     const saved=config.supportMapping?.kindProfiles?.[physicalConflict.candidateKind]?.gap;
     if(!preferred||preferred.kind!==physicalConflict.candidateKind||
        (!catalogue&&!(config.xml229SourceFieldPrecedence?.gap===true&&saved!=null&&text(saved)!==''))){
-      const reason=config.xml229SourceFieldPrecedence?.type!==true&&config.xml229SourceFieldPrecedence?.mappedCodes!==true?'STEP7_TYPE_PRECEDENCE_OFF':
+      const reason=config.xml229SourceFieldPrecedence?.type!==true&&!mappedCodePrecedenceApplies(attrs,config)?'STEP7_TYPE_PRECEDENCE_OFF':
         !preferred||preferred.kind!==physicalConflict.candidateKind?'STEP7_RULE_OR_EXPORTED_PROPOSAL_MISMATCH':
         'STEP7_GAP_POLICY_OR_SAVED_GAP_REQUIRED';
       const error=xml229RestraintConflictError(physicalConflict);

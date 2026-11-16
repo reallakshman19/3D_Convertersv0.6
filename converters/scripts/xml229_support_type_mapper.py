@@ -683,11 +683,23 @@ def owner_rule_kind(attrs, config, governed=('REST', 'GUIDE', 'LINESTOP')):
     return '', ''
 
 
+def mapped_code_precedence_enabled(config):
+    policy = config.get('xml229SourceFieldPrecedence') or {}
+    if 'mappedCodes' in policy:
+        return policy['mappedCodes'] is True
+    return config.get('xml229PhysicalVertexPrefinal') is not True
+
+
+def mapped_code_precedence_applies(attrs, config):
+    return mapped_code_precedence_enabled(config) and (
+        'NODETYPE_CODES' in attrs or
+        str(attrs.get('NODETYPE_CLASSIFICATION_SOURCE') or '').strip() == 'STEP7_SUPPORT_MAPPING')
+
+
 def staged_field_kind_decision(attrs, config, original_kind):
     """Explicit source-field precedence; no generated labels or NODETYPE rule."""
     policy = config.get('xml229SourceFieldPrecedence') or {}
-    mapped = policy.get('mappedCodes') is True and ('NODETYPE_CODES' in attrs or
-        str(attrs.get('NODETYPE_CLASSIFICATION_SOURCE') or '').strip() == 'STEP7_SUPPORT_MAPPING')
+    mapped = mapped_code_precedence_applies(attrs, config)
     if (not mapped and policy.get('type') is not True) or not original_kind:
         return ''
     if mapped and (not str(attrs.get('SOURCE_NODETYPE') or '').strip() or

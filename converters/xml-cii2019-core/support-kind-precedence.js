@@ -210,12 +210,21 @@ export function generatedSupportKind(attrs = {}) {
 // Explicit project policy: only the six original source fields may win over
 // a valid governed NODETYPE. No generated label, NAME/SPRE or NODETYPE rule
 // can grant this exception. Use the saved Step 7 priority/match/source rules.
+// Missing policy defaults ON in qualified V1; explicit OFF survives reload.
+// V2 has not qualified this authority: absent remains OFF, explicit ON is rejected by pre-Final.
+export function mappedCodePrecedenceEnabled(config={}) {
+  const value=config.xml229SourceFieldPrecedence?.mappedCodes;
+  return value===true || (value===undefined && config.xml229PhysicalVertexPrefinal!==true);
+}
+export function mappedCodePrecedenceApplies(attrs={},config={}) {
+  return mappedCodePrecedenceEnabled(config) &&
+    (Object.hasOwn(attrs,'NODETYPE_CODES')||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING');
+}
 export function stagedFieldKindDecision(attrs={},config={}) {
   const policy=config.xml229SourceFieldPrecedence||{};
-  const mapped=policy.mappedCodes===true&&
-    (Object.hasOwn(attrs,'NODETYPE_CODES')||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING');
+  const mapped=mappedCodePrecedenceApplies(attrs,config);
   if(!mapped&&policy.type!==true)return null;
-  // Mapped-code precedence is an explicit opt-in, not permission to infer
+  // Mapped-code precedence is a selected policy, not permission to infer
   // a code from generated labels or accept an incomplete exporter receipt.
   if(mapped&&(!text(attrs.SOURCE_NODETYPE)||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)!=='STEP7_SUPPORT_MAPPING'||
     !Array.isArray(attrs.NODETYPE_CODES)||attrs.NODETYPE_CODES.length!==1))return null;
@@ -257,8 +266,7 @@ export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED
   if(preferred&&governed.includes(preferred.kind)){observe?.(preferred);return preferred;}
   // The physical ST/GT conflict branch already holds failed proposals.
   // Other reclassified members must not fall through to the generated scalar.
-  if(config.xml229SourceFieldPrecedence?.mappedCodes===true&&text(attrs.SOURCE_NODETYPE)&&
-     (Object.hasOwn(attrs,'NODETYPE_CODES')||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING')&&
+  if(mappedCodePrecedenceApplies(attrs,config)&&text(attrs.SOURCE_NODETYPE)&&
      (text(attrs.NODETYPE)!==text(attrs.SOURCE_NODETYPE)||
       !Array.isArray(attrs.NODETYPE_CODES)||attrs.NODETYPE_CODES.length!==1||
       text(attrs.NODETYPE_CODES[0])!==text(attrs.SOURCE_NODETYPE)))

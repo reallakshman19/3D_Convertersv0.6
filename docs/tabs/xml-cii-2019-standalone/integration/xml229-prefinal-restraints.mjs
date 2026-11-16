@@ -12,6 +12,8 @@ import {materializeXml229PhysicalVertexRestraints} from './xml229-physical-verte
 import {recordXml229AttachmentDelegation} from './xml229-source-attachment-policy.mjs';
 import {migrateSupportMappingConfig} from '../../../converters/xml-cii2019-core/support-mapping-config.js';
 
+import {mappedCodePrecedenceEnabled} from '../../../converters/xml-cii2019-core/support-kind-precedence.js';
+
 const local=n=>String(n?.localName||n?.nodeName||'').replace(/^.*:/,'');
 const elements=n=>[...(n?.childNodes||[])].filter(x=>x.nodeType===1);
 function sourceShape(node){
@@ -81,7 +83,7 @@ export async function prepareXml229PrefinalRestraints({
   const decisions=(restraintAudit.evaluations||[]).filter(row=>
     row.source?.decision?.source==='explicit-staged-field-precedence');
   const policySummary=Object.freeze({
-    flags:Object.fromEntries(['type','gap','stiffness','friction','mappedCodes'].map(key=>[key,config.xml229SourceFieldPrecedence?.[key]===true])),
+    flags:Object.fromEntries(['type','gap','stiffness','friction','mappedCodes'].map(key=>[key,key==='mappedCodes'?mappedCodePrecedenceEnabled(config):config.xml229SourceFieldPrecedence?.[key]===true])),
     savedGaps:Object.fromEntries(['REST','GUIDE','LINESTOP'].map(kind=>[kind,config.supportMapping?.kindProfiles?.[kind]?.gap??null])),
     typeDecisionOccurrences:decisions.length,
     mappedCodeDecisionOccurrences:decisions.filter(row=>row.source.decision.rule?.policy==='xml229SourceFieldPrecedence.mappedCodes').length,
