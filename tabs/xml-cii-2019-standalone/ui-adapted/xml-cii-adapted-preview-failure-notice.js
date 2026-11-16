@@ -17,6 +17,42 @@ export function recordPreviewFailure(failure) {
 
 export function lastPreviewFailure() { return last; }
 
+/** Only a completed source-bound quarantine result is a review warning.
+ * Never infer review severity from a broad error-code prefix. */
+export function showRestraintReview(panel,review) {
+  if(!panel)return;
+  panel.querySelector('[data-restraint-review]')?.remove();
+  if(review?.status!=='HOLD'&&review?.status!=='REVIEW_BLOCKED')return;
+  const section=document.createElement('section');
+  section.dataset.restraintReview='true';
+  section.setAttribute('role',review.status==='HOLD'?'status':'alert');
+  section.style.cssText=review.status==='HOLD'
+    ?'color:#92400e;background:#fffbeb;border:1px solid #d97706;padding:8px;border-radius:5px;'
+    :'color:#fecaca;background:#451a1a;border:1px solid #ef4444;padding:8px;border-radius:5px;';
+  const title=document.createElement('p');
+  const warnings=Array.isArray(review.warnings)?review.warnings:[];
+  title.textContent=review.status==='HOLD'
+    ?'FOR REVIEW — '+warnings.length+' source restraint conflict(s). Trace and Preview remain available; independent Weight review may continue. Engineering restraint acceptance and native Final are HELD.'
+    :'Restraint review blocked: '+String(review.code||'')+' — '+String(review.error||'');
+  section.append(title);
+  if(warnings.length){
+    const details=document.createElement('details');
+    const summary=document.createElement('summary');
+    summary.textContent='Source-bound conflicts (XML node / JSON member)';
+    details.append(summary);
+    const list=document.createElement('ul');
+    for(const row of warnings){
+      const li=document.createElement('li');
+      li.textContent='XML Node '+String(row.nodeNumber||'?')+' — '+String(row.branchName||'')+
+        ' — '+String(row.message||row.code||'')+
+        (row.member?.path?' — '+row.member.path:'');
+      list.append(li);
+    }
+    details.append(list);section.append(details);
+  }
+  panel.append(section);
+}
+
 /** Render (or clear) the Preview blocker line inside a panel; keeps it current. */
 export function showPreviewBlocker(panel) {
   if (!panel) return;
@@ -32,7 +68,7 @@ export function showPreviewBlocker(panel) {
       panel.append(line);
     }
     line.textContent = 'Preview blocked: ' + failure.code + ' — ' + failure.message +
-      '. Source paths are verified here, but this support conflict must be fixed in the JSON/XML before Preview can run.';
+      '. This is a fatal Preview failure, not an O1 source-path failure.';
   };
   paint();
   if (panel.dataset.previewBlockerListener !== 'true') {
