@@ -1,5 +1,6 @@
 import { enrichHierarchyWithMapperKinds } from '../../../converters/xml-cii2019-core/support-mapping.js';
 import { baseNameWithoutExtension } from '../core/output-utils.js';
+import { normalizeAttRvmMdsMember } from '../../../converters/rmss-attribute-parser.js';
 
 function _toText(val) {
   if (val === null || val === undefined) return '';
@@ -248,7 +249,27 @@ function _expandRmssChildToPsiXmlNodes(child, componentRefNo, defaults) {
 
 export function _buildPsiXmlFromRmssHierarchy(hierarchy, inputName, options) {
   const normalizedHierarchy = Array.isArray(hierarchy) ? hierarchy : [];
+  let correctedMdsNodeTypes = 0;
+  if (options?.normalizeAttRvmMdsMembers === true) {
+    const visit = nodes => {
+      for (const node of nodes || []) {
+        if (!node) continue;
+        const attrs = node.attributes;
+        const type = _toText(node.type || attrs?.TYPE).trim().toUpperCase();
+        if (attrs && ['SUPPORT', 'ANCI', 'ATTA'].includes(type)) {
+          const before = attrs.NODETYPE;
+          normalizeAttRvmMdsMember(attrs);
+          if (attrs.NODETYPE !== before) correctedMdsNodeTypes++;
+        }
+        for (const key of ['children', 'items', 'branches'])
+          if (Array.isArray(node[key])) visit(node[key]);
+      }
+    };
+    visit(normalizedHierarchy);
+  }
   const supportMapperStats = enrichHierarchyWithMapperKinds(normalizedHierarchy);
+  if (options?.normalizeAttRvmMdsMembers === true)
+    supportMapperStats.correctedMdsNodeTypes = correctedMdsNodeTypes;
   const branches = normalizedHierarchy.filter((entry) => entry && Array.isArray(entry.children) && entry.children.length > 0);
   if (!branches.length) {
     throw new Error('ATT/TXT parser returned no branch topology. Cannot generate XML.');
