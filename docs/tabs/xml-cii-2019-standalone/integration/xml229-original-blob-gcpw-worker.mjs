@@ -49,6 +49,7 @@ import {projectXml229AuditedDecisionProvenance}
 import {exportXml229SourceBoundReviewBackup,restoreXml229SourceBoundReviewBackup}
  from './xml229-source-weight-review-transfer.mjs';
 
+import {assertXml229StagedScope} from './xml229-staged-scope-preflight.mjs';
 import {resolveXml229ReviewSourceInput} from './xml229-review-source-input.mjs';
 import {assertNativeXml229RestraintReviewClear} from './xml229-native-restraint-review-gate.mjs';
 installWeightBasisXmlDom(globalThis);
@@ -101,6 +102,7 @@ async function start(req){
  progress(req.requestId,sourceInput.kind==='XML_ONLY'?'original-xml-sha256':'original-json-blob-sha256');
  if(cancelled)return;
  const stagedSource=sourceInput.stagedSource;
+ if(stagedSource){progress(req.requestId,'original-xml-json-scope-preflight');assertXml229StagedScope(xmlText,stagedSource);}
  const sources=[{sourceId,mediaType:'application/xml',text:xmlText}];
  progress(req.requestId,'full-original-source-master-basis');
  const basis=await createPreviewBasis({domainId:'xml-cii/2019',sources,selection,masters,
@@ -136,6 +138,7 @@ async function start(req){
  const produced=await openXml229EngineeringFactModel({
   basis,live,xmlText,sourceId,previewResult,expectedOriginalCount,
   maxPhysical:Math.min(req.maxPhysical??MAX_PHYSICAL,MAX_PHYSICAL),
+   onProgress:stage=>progress(req.requestId,stage),
  });
  exactCensus(produced,req,original);
  if(cancelled)return;

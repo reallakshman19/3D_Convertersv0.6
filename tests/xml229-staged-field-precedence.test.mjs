@@ -151,6 +151,16 @@ test('actual independent O1 Worker recomputes the review against its own config,
        sourceText:XML,sourceKind:'xml',jsonConfig:cfg.resolverJsonTrace,supportConfigJson:JSON.stringify(config)}});
      const ready=messages.find(m=>m.kind==='READY');
      assert.ok(ready,JSON.stringify(messages));
+     const {buildStagedJsonTraceSidecar}=await import('../tabs/xml-cii-2019-standalone/xml-cii-staged-json-trace-sidecar.js');
+     const expected=buildStagedJsonTraceSidecar(json,{resolverJsonTrace:cfg.resolverJsonTrace});
+     const req={schema:'LFJ.O1.DomainWorker.v1',jobId:id,sourceRefId:'synthetic',sourceSha256:sha,sourceRevision:'v1'};
+     await globalThis.onmessage({data:{...req,kind:'EXPORT',type:'sidecar'}});
+     const begin=messages.find(m=>m.kind==='EXPORT_BEGIN');
+     assert.ok(begin,JSON.stringify(messages));assert.equal(begin.type,'sidecar');assert.equal(begin.rows,3);
+     for(let i=0;i<100&&!messages.some(m=>m.kind==='EXPORT_END');i++)await globalThis.onmessage({data:{...req,kind:'EXPORT_ACK',token:begin.token}});
+     assert.ok(messages.some(m=>m.kind==='EXPORT_END'));
+     const chunks=messages.filter(m=>m.kind==='EXPORT_CHUNK').map(m=>m.bytes);
+     assert.equal(await new Blob(chunks).text(),expected.csv);
      await globalThis.onmessage({data:{schema:'LFJ.O1.DomainWorker.v1',kind:'CANCEL'}});
      return ready;
    };
@@ -315,4 +325,49 @@ test('Node Type priority and fallback are executable rather than display-only',a
  const stale=regenerated();stale[0].children[2].attributes.NODETYPE_CODES=['9'];
  assert.equal((await stage(stale,config,'preview')).restraintReview.status,'FOR_REVIEW');
  assert.throws(()=>native(stale,config),/NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS/);
+});
+
+test('default O1 Save persists effective resolver config independently of source indexing and controls sidecar readiness',async()=>{
+ const {createRequire}=await import('node:module');
+ const {installMiniDom,MiniElement}=createRequire(import.meta.url)('./helpers/mini-dom.js');
+ const {createXmlCiiAdaptedWorkflowState}=await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-state.js');
+ const {startLfjO1Domain,syncO1ResolverControls,revokeLfjO1Domain}=await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-lfj-o1-domain-ui.js');
+ const oldDoc=globalThis.document,oldStorage=globalThis.localStorage;
+ try{
+   installMiniDom();
+   const store=new Map();
+   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)}});
+   const stateRef={current:createXmlCiiAdaptedWorkflowState()};
+   stateRef.current.resolverJsonTraceConfig={...stateRef.current.resolverJsonTraceConfig,matchMode:'ROOT',coordinateTolerance:17,dtxrPositionOffset:{enabled:true,xOffset:1,yOffset:2,zOffset:3}};
+   const root=new MiniElement('div'),status=new MiniElement('span'),sidecar=new MiniElement('span'),button=new MiniElement('button');
+   status.dataset.resolverWritebackStatus='true';sidecar.dataset.resolverSidecarStatus='true';button.dataset.action='download-json-trace-sidecar';
+   root.appendChild(status);root.appendChild(sidecar);root.appendChild(button);
+   const session={stateRef,container:root};
+   await startLfjO1Domain(session,stateRef,{save:true});
+   const config=JSON.parse(stateRef.current.supportConfigJson);
+   assert.equal(config.resolverJsonTrace.matchMode,'ROOT');assert.equal(config.jsonTrace.coordinateTolerance,17);assert.equal(config.dtxrPositionOffset.zOffset,3);
+   assert.equal(JSON.parse(store.get('xml-cii-import-masters-v1')).config.resolverJsonTrace.matchMode,'ROOT');
+   assert.match(stateRef.current.resolverJsonTraceWriteBackStatus,/saved into standalone/);
+   assert.equal(button.disabled,true);
+   syncO1ResolverControls(session,{jsonTraceSidecarWorkerReady:true,jsonTraceSidecarStatus:'Verified sidecar ready'});
+   assert.equal(button.disabled,false);assert.equal(sidecar.textContent,'Verified sidecar ready');
+   assert.equal(stateRef.current.stagedJsonText,'');assert.equal(stateRef.current.jsonTraceSidecarCsv,'');
+   revokeLfjO1Domain(session);assert.equal(button.disabled,true);
+   assert.equal(createXmlCiiAdaptedWorkflowState().resolverJsonTraceConfig.matchMode,'ROOT');
+ }finally{globalThis.document=oldDoc;Object.defineProperty(globalThis,'localStorage',{configurable:true,value:oldStorage});}
+});
+test('explicit named disjoint branch exports fail fast without refusing partial or linked sources',async()=>{
+ const {inspectXml229StagedScope,assertXml229StagedScope}=await import('../tabs/xml-cii-2019-standalone/integration/xml229-staged-scope-preflight.mjs');
+ const disjoint=[{type:'BRANCH',name:'/OTHER/LINE/B4',children:[{type:'SUPPORT',attributes:{NAME:'/PS-999',REF:'=100/999'}}]}];
+ const xml='<PipeStressExport><Pipe><Branch><Branchname>/ORIGINAL/LINE/B1</Branchname><Node><NodeNumber>10</NodeNumber><NodeName>PS-111/DATUM</NodeName><ComponentRefNo>=100/111</ComponentRefNo><Position>0 0 0</Position></Node></Branch></Pipe></PipeStressExport>';
+ assert.equal(inspectXml229StagedScope(xml,JSON.stringify(disjoint)).status,'DISJOINT');
+ assert.throws(()=>assertXml229StagedScope(xml,JSON.stringify(disjoint)),e=>e.code==='ENGINEERING_PREVIEW_STAGED_SCOPE_MISMATCH'&&e.retryable===false);
+ assert.equal(inspectXml229StagedScope(xml,'').status,'XML_ONLY');
+ assert.equal(inspectXml229StagedScope(xml,JSON.stringify([{type:'SUPPORT',attributes:{NAME:'PS-999'}}])).status,'UNKNOWN');
+ const partial=structuredClone(disjoint);partial.push({type:'BRANCH',name:'/ORIGINAL/LINE/B2',children:[]});
+ assert.equal(inspectXml229StagedScope(xml,JSON.stringify(partial)).status,'OVERLAP');
+ const linked=structuredClone(disjoint);linked[0].children[0].attributes.COMPRE='=100/111';
+ assert.equal(inspectXml229StagedScope(xml,JSON.stringify(linked)).status,'POSSIBLE_OVERLAP');
+ const named=structuredClone(disjoint);named[0].children[0].attributes.NAME='PS-111.1';
+ assert.equal(inspectXml229StagedScope(xml,JSON.stringify(named)).status,'POSSIBLE_OVERLAP');
 });

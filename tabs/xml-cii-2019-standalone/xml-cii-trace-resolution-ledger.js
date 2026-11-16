@@ -465,12 +465,12 @@ function supportKinds(value) {
   return uniqueValues(kinds);
 }
 
-function recordForNode(node, groups, toleranceMm, mode = 'LEGACY') {
+function recordForNode(node, groups, toleranceMm, mode = 'LEGACY', positionalGroups=groups) {
   const positionalOnly = mode === 'POS';
   const xmlTag = positionalOnly ? '' : normalizeSupportTag(node.xmlNodeName || node.psKey || node.componentRefNo);
   const explicitAuthority = positionalOnly ? null : explicitPsAuthority(node.xmlBranch, xmlTag, groups);
   const candidate = node.xmlPoint
-    ? groupCandidate(node.xmlBranch, node.xmlPoint, xmlTag, groups, toleranceMm)
+    ? groupCandidate(node.xmlBranch, node.xmlPoint, xmlTag, positionalGroups, toleranceMm)
     : { best: null, ambiguous: false, candidates: [] };
   const selected = explicitAuthority?.blocked
     ? { ...candidate, best: null, ambiguous: explicitAuthority.ambiguous === true }
@@ -557,14 +557,14 @@ function recordForNode(node, groups, toleranceMm, mode = 'LEGACY') {
   };
 }
 
-function inferPositionOffset(nodes, groups, config = {}) {
+function inferPositionOffset(nodes, groups, config = {}, groupsForBranch=()=>groups) {
   if (configuredPositionOffset(config)) return null;
   const precision = Math.max(Number(config?.resolverJsonTrace?.autoCalibratePrecision) || 0.1, 0.001);
   const minVotes = Math.max(Math.round(Number(config?.resolverJsonTrace?.autoCalibrateMinSamples) || 2), 1);
   const buckets = new Map();
   for (const node of nodes) {
     if (!node.xmlPoint) continue;
-    for (const group of groups) {
+    for (const group of groupsForBranch(node.xmlBranch)) {
       const relationship = standaloneDtxrBranchRelationship(node.xmlBranch, group.branch.full);
       if (!relationship.compatible) continue;
       const offset = {
@@ -705,15 +705,25 @@ export function buildStandaloneDtxrResolutionLedger(sourceText, stagedJsonText, 
   let groups = mode === 'PS' || mode === 'ROOT'
     ? buildStandaloneDtxrIdentityGroups(stagedJsonText, mode, config)
     : buildStandaloneDtxrPositionGroups(stagedJsonText, toleranceMm, config);
+  // Positional matching only accepts compatible branch roots. Reuse the
+  // original-order subset across all nodes of one branch, preserving exact
+  // relationship ranking, PS explicit-attachment semantics and tolerances.
+  const branchGroups=new Map();
+  const groupsForBranch=branch=>{
+    if(!branchGroups.has(branch))branchGroups.set(branch,groups.filter(g=>
+      standaloneDtxrBranchRelationship(branch,g.branch.full).compatible));
+    return branchGroups.get(branch);
+  };
   let records = nodes.map((node) => mode === 'PS' || mode === 'ROOT'
     ? recordForIdentityNode(node, groups, toleranceMm, mode, config)
-    : recordForNode(node, groups, toleranceMm, mode));
+    : recordForNode(node, groups, toleranceMm, mode, groupsForBranch(node.xmlBranch)));
   let calibration = null;
   if ((mode === 'POS' || mode === 'LEGACY') && !records.some((record) => record.effectiveSource === 'DTXR_POS')) {
-    calibration = inferPositionOffset(nodes, groups, config);
+    calibration = inferPositionOffset(nodes, groups, config, groupsForBranch);
     if (calibration) {
       groups = applyGroupOffset(groups, calibration);
-      records = nodes.map((node) => recordForNode(node, groups, toleranceMm, mode));
+      branchGroups.clear();
+      records = nodes.map((node) => recordForNode(node, groups, toleranceMm, mode, groupsForBranch(node.xmlBranch)));
     }
   }
   const diagnostics = [
