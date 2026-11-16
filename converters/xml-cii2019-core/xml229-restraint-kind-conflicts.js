@@ -21,8 +21,7 @@ export function identifyXml229MdsKindConflict(attrs = {}, config = {}) {
   // ST/GT substring from an unrelated catalogue path.
   if (!physicalKind || !new RegExp('^' + functionCode + '[0-9]+$').test(mdsType) ||
       !(functionCode === 'ST' ? /^LS-[A-Z0-9-]+$/.test(catalogue)
-        : /^PG-[A-Z0-9-]+$/.test(catalogue)) ||
-      !/[-+]?\d+(?:\.\d+)?\s*mm/i.test(gap)) return null;
+        : /^PG-[A-Z0-9-]+$/.test(catalogue))) return null;
   const typedKind = nodeTypeSupportKind(attrs, config);
   if (!typedKind || typedKind === physicalKind) return null;
   return {
@@ -42,6 +41,9 @@ export function identifyXml229MdsKindConflict(attrs = {}, config = {}) {
 
 export function approvedXml229MdsKindResolution(attrs = {}, config = {}, conflict = null) {
   if (!conflict) return null;
+  // A type approval without an explicit source gap would silently invent
+  // zero clearance. Keep gapless ST/GT members in HOLD until evidenced.
+  if (!/[-+]?\d+(?:\.\d+)?\s*mm/i.test(conflict.fields.CMPSUPGAP)) return null;
   const rows = config.xml229RestraintKindOverrides;
   if (!Array.isArray(rows)) return null;
   // Fail closed if duplicate records claim incompatible decisions for a
