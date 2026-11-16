@@ -101,7 +101,7 @@ export async function openXml229EngineeringFactModel({
  // master/config buffers whose full content is attested by GC-PW.
  const workConfig=isolatedOriginalPreviewWorkConfig(live.config||{});
  const restraintStage=await prepareXml229PrefinalRestraints({
-   xmlText,stagedJsonText:live.stagedSource||'',config:workConfig,
+   xmlText,stagedJsonText:live.stagedSource||'',config:workConfig,purpose:'preview',
  });
  const prepared=preparePreviewNodeOccurrenceDocument({
    xmlText,sourceDocument:restraintStage.document,config:workConfig,
@@ -305,8 +305,9 @@ export async function openXml229EngineeringFactModel({
       verifiedPhysicalOwnerCount:physical.length,
       verifiedPhysicalFactCount:physical.length*XML229_ENGINEERING_FIELDS.length,
     },
-    engineeringAcceptance:'VERIFIED',
-    fullFactPopulationAccepted:true,
+    restraintReview:restraintStage.restraintReview,
+    engineeringAcceptance:restraintStage.restraintReview.status==='HOLD'?'HOLD':'VERIFIED',
+    fullFactPopulationAccepted:restraintStage.restraintReview.status!=='HOLD',
     engineeringFactSnapshotId:model.info.snapshotId,
     engineeringFactCount:records.length,
   });
