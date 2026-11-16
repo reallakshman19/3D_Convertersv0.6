@@ -17,6 +17,9 @@ export const JSON_TRACE_SIDECAR_COLUMNS = Object.freeze([
   'MDSLINKREF', 'SUPPORT_KIND', 'SUPPORT_MAPPER_KIND', 'RAW_TYPE',
   'JSON source path', 'JSON ordinal', 'Grouping mode', 'Tolerance (mm)',
   'Datum X (mm)', 'Datum Y (mm)', 'Datum Z (mm)',
+  'Member REF', 'Attached component REF', 'CMPSUPGAP', 'CMPSUPGAP_POS', 'CMPSUPGAP_PS',
+  'SOURCE_NODETYPE', 'SOURCE_NODEGAP', 'SUPPORT_TYPE', 'SUPPORT_EFFECTIVE_GAP', 'SUPPORT_GAP_SOURCE',
+  'Source attributes JSON', 'Source member JSON',
 ]);
 
 const text = value => value === null || value === undefined ? '' : String(value).trim();
@@ -40,10 +43,11 @@ function rawCoord(value) {
   return value === null || value === undefined ? '' :
     typeof value === 'object' ? JSON.stringify(value) : text(value);
 }
+function projectedCell(value) {return text(value).replace(/\r\n?|\n/g,'\\n');}
 function safeCell(value) {
   // Keep the table parseable and safe to open as XLS: prevent CSV formula
   // injection for arbitrary source fields, including '=...' component refs.
-  const raw=text(value).replace(/\r\n?|\n/g,'\\n');
+  const raw=projectedCell(value);
   const safe=/^[\s]*[=+\-@]/.test(raw) ? "'" + raw : raw;
   return /[",\n\r]/.test(safe) ? '"' + safe.replace(/"/g,'""') + '"' : safe;
 }
@@ -95,18 +99,23 @@ export function buildStagedJsonTraceSidecar(stagedJsonText, config = {}) {
     }
     const effectivePoint=point || context.point;
     const inherited=!!(!point && context.point);
+    const hasChildren=Array.isArray(value.children)&&value.children.length>0;
     if(type!=='BRANCH') {
       const name=text(attribute(attrs,['NAME','NodeName','SupportTag']) || value.name);
-      const dtxr=attribute(attrs,['DTXR','DESC','DESCRIPTION','MDSDTXR','RTEXT','SPRE']);
+      const explicit=attribute(attrs,['DTXR_POS']);
+      const dtxr=(!parseStandaloneDtxrPoint(explicit)&&explicit)||attribute(attrs,['DTXR','DESC','DESCRIPTION','RTEXT','SPRE']);
       const fallback=attribute(attrs,['MDSSUPPTYPE','MDSSUPPFUNC','SUPPORT_KIND']);
-      const detail=text(dtxr || fallback || type);
-      const hasEvidence=!!(name || dtxr || fallback || attribute(attrs,
-        ['CMPSUPGAP','DTXR_PS','COMPONENTREFNO','COMPRE','ATTACHED_COMPONENT_REF']));
+      const detail=text(dtxr || (!hasChildren && (value.name || type)) || fallback);
+      // Every real source component is a row, even without matching evidence
+      // or coordinates. Pure position containers only supply inherited context.
+      const coordinateContainer=hasChildren&&!!point&&!name&&!dtxr&&!fallback&&
+        !attribute(attrs,['REF','CMPSUPGAP','DTXR_PS','COMPONENTREFNO','COMPRE','ATTACHED_COMPONENT_REF']);
+      const hasEvidence=!coordinateContainer&&!!(type||name||Object.keys(attrs).length);
       if(hasEvidence) {
         if(effectivePoint)positionCount++;
         if(inherited)inheritedCount++;
         rows.push({
-          'Reference of the element':text(attribute(attrs,['ComponentRefNo','COMPRE','REF'])),
+          'Reference of the element':text(attribute(attrs,['REF','RefNo','ComponentRefNo'])),
           'RTEXT of detailing text':detail,
           'Name of the element':name,
           'POS WRT /*':coordinateString(effectivePoint),
@@ -137,6 +146,18 @@ export function buildStagedJsonTraceSidecar(stagedJsonText, config = {}) {
           'Datum X (mm)':policy.offset.x,
           'Datum Y (mm)':policy.offset.y,
           'Datum Z (mm)':policy.offset.z,
+          'Member REF':text(attribute(attrs,['REF','RefNo','ComponentRefNo'])),
+          'Attached component REF':text(attribute(attrs,['COMPRE','ATTACHED_COMPONENT_REF'])),
+          'CMPSUPGAP':text(attribute(attrs,['CMPSUPGAP'])),
+          'CMPSUPGAP_POS':text(attribute(attrs,['CMPSUPGAP_POS'])),
+          'CMPSUPGAP_PS':text(attribute(attrs,['CMPSUPGAP_PS'])),
+          'SOURCE_NODETYPE':text(attribute(attrs,['SOURCE_NODETYPE'])),
+          'SOURCE_NODEGAP':text(attribute(attrs,['SOURCE_NODEGAP'])),
+          'SUPPORT_TYPE':text(attribute(attrs,['SUPPORT_TYPE'])),
+          'SUPPORT_EFFECTIVE_GAP':text(attribute(attrs,['SUPPORT_EFFECTIVE_GAP'])),
+          'SUPPORT_GAP_SOURCE':text(attribute(attrs,['SUPPORT_GAP_SOURCE'])),
+          'Source attributes JSON':JSON.stringify(attrs),
+          'Source member JSON':JSON.stringify(Object.fromEntries(Object.entries(value).filter(([key])=>key!=='children'))),
         });
       }
     }
@@ -153,4 +174,38 @@ export function buildStagedJsonTraceSidecar(stagedJsonText, config = {}) {
     inheritedPositionRows:inheritedCount,
     memberRows:rows,columns:JSON_TRACE_SIDECAR_COLUMNS,config:policy,
   };
+}
+
+/** Compare all original member paths, including unmatched XML members. No
+ * coordinate or assembly key deduplication, no substring matches. Raw JSON
+ * snapshots retain null, zero, whitespace, typed values and all attributes.
+ * A duplicate or extra row cannot improve the score. */
+export function compareStagedJsonTraceSidecar(expectedRows, importedRows) {
+  const expected=Array.isArray(expectedRows)?expectedRows:[];
+  const imported=Array.isArray(importedRows)?importedRows:[];
+  const byPath=new Map();
+  for(const row of imported){
+    const path=String(row?.['JSON source path']??'');
+    if(!byPath.has(path))byPath.set(path,[]);
+    byPath.get(path).push(row);
+  }
+  const rows=[];let matched=0,missing=0,duplicates=0,extra=0,changed=0;
+  const report=(path,status,fields=[])=>{if(rows.length<100)rows.push({sourcePath:path,status,fields,matched:status==='MATCH'});};
+  for(const row of expected){
+    const path=row['JSON source path'],candidates=byPath.get(path)||[];
+    byPath.delete(path);
+    if(!candidates.length){missing++;report(path,'MISSING');continue;}
+    if(candidates.length!==1){duplicates+=candidates.length-1;report(path,'DUPLICATE');}
+    const actual=candidates[0];
+    const fields=JSON_TRACE_SIDECAR_COLUMNS.filter(key=>
+      !Object.hasOwn(actual,key)||String(actual[key]??'')!==projectedCell(row[key]));
+    if(fields.length){changed++;report(path,'FIELD_MISMATCH',fields);}
+    else if(candidates.length===1)matched++;
+  }
+  for(const [path,items] of byPath){extra+=items.length;report(path,'EXTRA');}
+  const compared=expected.length+extra+duplicates;
+  return {schema:'XML229.StagedJsonSidecarRoundTrip.v1',expected:expected.length,
+    imported:imported.length,compared,matched,mismatched:compared-matched,
+    missing,extra,duplicates,changed,percent:compared?100*matched/compared:0,
+    complete:compared>0&&matched===compared,rows,engineeringReady:false};
 }
