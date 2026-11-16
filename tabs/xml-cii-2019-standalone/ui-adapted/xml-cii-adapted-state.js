@@ -261,6 +261,7 @@ export function createXmlCiiAdaptedWorkflowState() {
     supportConfigJson: configJson,
     regexTesterConfig: getStoredRegexConfig(), regexTesterResult: null, regexTesterRunning: false, regexTesterWriteBackStatus: '',
     resolverJsonTraceConfig: getStoredResolverConfig(), resolverJsonTraceResult: null, resolverJsonTraceJsonResult: null, resolverJsonTraceTableResult: null, resolverJsonTraceRunning: false, resolverJsonTraceWriteBackStatus: '',
+    jsonTraceSidecarCsv: '', jsonTraceSidecarFileName:'staged-json-trace-sidecar.csv', jsonTraceSidecarRowCount:0, jsonTraceSidecarStatus:'',
     jsonTraceTableText: '', jsonTraceTableRows: [], jsonTraceTableFieldMap: {}, jsonTraceTableConfig: createDefaultTraceTableConfig(), jsonTraceTableSourceName: '', jsonTraceTableSheetNames: [], jsonTraceTableActiveSheet: '', jsonTraceTableWorkbookData: null, jsonTraceTableStatus: '', jsonTraceTableBenchmark: null,
     manualElementSideloadConfig: createDefaultManualElementSideloadConfig(), manualElementSideloadResult: null, manualElementSideloadRunning: false, manualElementSideloadWriteBackStatus: '',
     previewDiagnosticsAuditReport: null, previewDiagnosticsAuditStatus: '',
