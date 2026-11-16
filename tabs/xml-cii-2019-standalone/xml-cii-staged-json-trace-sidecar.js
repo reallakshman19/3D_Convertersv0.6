@@ -48,7 +48,7 @@ function safeCell(value) {
   // Keep the table parseable and safe to open as XLS: prevent CSV formula
   // injection for arbitrary source fields, including '=...' component refs.
   const raw=projectedCell(value);
-  const safe=/^[\s]*[=+\-@]/.test(raw) ? "'" + raw : raw;
+  const safe=/^'*[=+\-@]/.test(raw) ? "'" + raw : raw;
   return /[",\n\r]/.test(safe) ? '"' + safe.replace(/"/g,'""') + '"' : safe;
 }
 function configFor(config = {}) {
@@ -208,4 +208,33 @@ export function compareStagedJsonTraceSidecar(expectedRows, importedRows) {
     imported:imported.length,compared,matched,mismatched:compared-matched,
     missing,extra,duplicates,changed,percent:compared?100*matched/compared:0,
     complete:compared>0&&matched===compared,rows,engineeringReady:false};
+}
+
+/** Use the actual resolver's datum calibration when it inferred one. */
+export function sidecarConfigForTraceResult(result, resolver={}) {
+  const calibration=result?.traceResolutionLedger?.calibration;
+  const effective={...(result?.jsonConfig||resolver)};
+  if(calibration&&effective.dtxrPositionOffset?.enabled!==true)
+    effective.dtxrPositionOffset={enabled:true,xOffset:calibration.x,yOffset:calibration.y,zOffset:calibration.z};
+  return {resolverJsonTrace:effective,dtxrPositionOffset:effective.dtxrPositionOffset};
+}
+
+/** Separate XML assignment check, not a substitute for full member parity. */
+export function traceMemberAssignments(result) {
+  return (result?.resolvedFacts||result?.matchedFacts||[]).map(f=>({
+    xmlIndex:f.xmlIndex,paths:(f.hitCount>0?(f.positionMembers||[]):[])
+      .map(m=>m.path||m.sourcePath).filter(Boolean).sort()
+  }));
+}
+export function compareSidecarXmlAssignments(jsonAssignments,tableAssignments) {
+  const left=new Map(jsonAssignments.map(r=>[r.xmlIndex,r.paths]));
+  const right=new Map(tableAssignments.map(r=>[r.xmlIndex,r.paths]));
+  const keys=new Set([...left.keys(),...right.keys()]);
+  let matched=0;const differences=[];
+  for(const xmlIndex of keys){
+    const a=left.get(xmlIndex)||[],b=right.get(xmlIndex)||[];
+    if(JSON.stringify(a)===JSON.stringify(b))matched++;
+    else if(differences.length<100)differences.push({xmlIndex,jsonPaths:a,tablePaths:b});
+  }
+  return {compared:keys.size,matched,mismatched:keys.size-matched,differences};
 }
