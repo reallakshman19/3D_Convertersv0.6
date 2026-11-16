@@ -178,7 +178,8 @@ export function tableSupportKind(attrs = {}, config = {}, onlyUserRows = false, 
 export function matchAttRvmSupportTable(attrs = {}, config = {}, source = 'ATT', observe = null) {
   const sources = [...STAGED_SOURCES, text(source).toUpperCase(), 'ATT/RVM', 'ATT-RVM'];
   const f = fields(attrs);
-  const evidence = Object.fromEntries(Object.entries(f).filter(([key])=>!GENERATED_FIELDS.includes(key)));
+  const evidence = Object.fromEntries(Object.entries(f).filter(([key])=>
+    !GENERATED_FIELDS.includes(key) && !/^(?:SUPPORTMAPPING|SUPPORTEFFECTIVE|SUPPORTGAPSOURCE|NODETYPECLASSIFICATION|NODETYPECODES|SOURCENODETYPE|SOURCENODEGAP)/.test(key)));
   if (!DESCRIPTION_KEYS.some(key=>evidence[key]) && evidence.MDSDTXR) evidence.DESCRIPTION = evidence.MDSDTXR;
   return matchTableRules(attrs,evidence,tableRules(config,sources),observe);
 }
