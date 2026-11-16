@@ -4,6 +4,8 @@ import {
   renderUnifiedSupportMappingTable
 } from '../../model-converters/converters/xmltocii2019_helper/support-mapping-table.js';
 import { saveMasterContextToLocalStorage, updateWorkflowState } from './xml-cii-adapted-state.js?v=20261001-weight-output-2';
+import { migrateSupportMappingConfig } from '../../../converters/xml-cii2019-core/support-mapping-config.js';
+import { recordPreviewRestraintReview,recordPreviewFailure } from './xml-cii-adapted-preview-failure-notice.js';
 import { createDefaultSupportTypeMapperConfig } from '../xml-cii-support-type-mapper.js';
 
 const KINDS = ['REST', 'GUIDE', 'LINESTOP', 'ANCHOR'];
@@ -167,9 +169,17 @@ function renderRestraintTypeCodeTable(card, stateRef, render) {
     input.dataset.field='xml229-source-field-precedence-'+key;
     input.disabled=config.xml229PhysicalVertexPrefinal===true;
     input.addEventListener('change',()=>{
-      onSaveConfig({...config,xml229SourceFieldPrecedence:{...policy,[key]:input.checked}});
+      // Persist exactly the displayed profiles when Gap is explicitly selected.
+      const next={...config,xml229SourceFieldPrecedence:{...policy,[key]:input.checked}};
+      if(key==='gap'&&input.checked)next.supportMapping=migrateSupportMappingConfig(config);
+      recordPreviewRestraintReview(null);recordPreviewFailure(null);
+      onSaveConfig(next);
     });
   }
+  const profiles=migrateSupportMappingConfig(config).kindProfiles;
+  policySection.appendChild(createElement('p','Current Step 7 gap values (mm): REST '+profiles.REST.gap+
+    ', GUIDE '+profiles.GUIDE.gap+', LINESTOP '+profiles.LINESTOP.gap+
+    '. Checking Gap saves these displayed values; change them before selecting this policy if zero clearance is not intended.','xml-cii-phase-help'));
   policySection.appendChild(createElement('p','Off preserves the existing behavior. On is an explicit project-wide authority choice for matched staged members, not a change to the original JSON. Type uses enabled Step 7 rows by priority; generated labels cannot override NODETYPE. Gapless ST/GT type conflicts need the Gap option and a saved profile Gap. Equal-priority rules, incompatible source fields and invalid settings still require correction. Original XML-authored restraints remain protected. Rebuild Preview / O1 / Final after changes. This option is currently qualified only for the standard V1 closure.','xml-cii-phase-help'));
   card.appendChild(policySection);
 

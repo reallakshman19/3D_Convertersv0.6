@@ -228,7 +228,17 @@ export function stagedFieldKindDecision(attrs={},config={}) {
   const expected={REST:'+Y',GUIDE:'GUI',LINESTOP:'LIM'}[kind];
   if(profile?.xmlTypes?.length!==1||profile.xmlTypes[0]!==expected)
     throw refuse('PREFINAL_RESTRAINT_CONFIG_INVALID','Field precedence requires a single matching governed XML/CII profile type');
+  // Current source rules, not the exporter proposal, confer authority.
+  const generated=text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING';
+  const expectedCode={REST:'14',GUIDE:'8',LINESTOP:'9'}[kind];
+  if(generated&&(text(attrs.NODETYPE)!==expectedCode||
+     (text(attrs.SUPPORT_EFFECTIVE_NODETYPE)&&text(attrs.SUPPORT_EFFECTIVE_NODETYPE)!==expectedCode)||
+     (attrs.NODETYPE_CODES!=null&&(!Array.isArray(attrs.NODETYPE_CODES)||
+       attrs.NODETYPE_CODES.length!==1||text(attrs.NODETYPE_CODES[0])!==expectedCode))))return null;
   return {kind,source:'explicit-staged-field-precedence',rule:{...receipt.rule,
+    resolutionStatus:'RESOLVED_BY_STEP7_POLICY',
+    proposedNodeType:text(attrs.NODETYPE),exportedRuleId:text(attrs.SUPPORT_MAPPING_RULE_ID),
+    effectiveNodeType:expectedCode,exportedProposalVerified:generated,
     originalKind,originalNodeType:rawNodeType,effectiveXmlType:expected,
     policy:'xml229SourceFieldPrecedence.type'}};
 }

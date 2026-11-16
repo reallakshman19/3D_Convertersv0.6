@@ -707,4 +707,13 @@ def staged_field_kind_decision(attrs, config, original_kind):
     types = [{'GUIDE':'GUI','X':'GUI','LIMIT':'LIM','LINESTOP':'LIM','Z':'LIM'}.get(str(v).strip().upper(),str(v).strip().upper()) for v in types if str(v).strip()]
     if types != [expected]:
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_CONFIG_INVALID')
+    if str(attrs.get('NODETYPE_CLASSIFICATION_SOURCE') or '').strip() == 'STEP7_SUPPORT_MAPPING':
+        expected_code = {'REST':'14','GUIDE':'8','LINESTOP':'9'}[kind]
+        proposal = str(attrs.get('NODETYPE') or '').strip()
+        effective = str(attrs.get('SUPPORT_EFFECTIVE_NODETYPE') or '').strip()
+        codes = attrs.get('NODETYPE_CODES')
+        if (proposal != expected_code or (effective and effective != expected_code) or
+                (codes is not None and (not isinstance(codes,list) or len(codes)!=1 or
+                 str(codes[0]).strip()!=expected_code))):
+            return ''
     return kind
