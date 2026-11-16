@@ -447,7 +447,7 @@ def verify_prefinal_restraint_config_custody(final, stage, config, require):
             'NATIVE_FINALIZED_GEOMETRY_SOURCE_DRIFT')
 
 
-def replay_prefinal_restraints(expected, packet, staged_json_path, config, require):
+def replay_prefinal_restraints(expected, packet, staged_json_path, config, require, provenance_config=None):
     final = packet.get('finalizedGeometry') or {}
     stage = final.get('prefinalRestraints')
     if stage is None:
@@ -461,7 +461,8 @@ def replay_prefinal_restraints(expected, packet, staged_json_path, config, requi
             (not packet.get('originalJsonSha256') or packet['originalJsonSha256'] == sha),
             'NATIVE_PREFINAL_RESTRAINT_SOURCE_SHA_DRIFT')
     require(isinstance(config, dict), 'NATIVE_PREFINAL_RESTRAINT_CONFIG_REQUIRED')
-    verify_prefinal_restraint_config_custody(final, stage, config, require)
+    verify_prefinal_restraint_config_custody(final, stage,
+        provenance_config if provenance_config is not None else config, require)
     wants_v2=config.get('xml229PhysicalVertexPrefinal') is True and bool(raw.strip()) and \
         (config.get('supportMapping') or {}).get('useJsonForRestraints') is not False
     require(stage['schema']==('XML229.PrefinalRestraints.v2' if wants_v2 else 'XML229.PrefinalRestraints.v1'),
