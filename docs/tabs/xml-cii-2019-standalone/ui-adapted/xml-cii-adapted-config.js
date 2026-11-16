@@ -125,7 +125,7 @@ function _renderModelingCard(configObj, syncJsonText, controls) {
     configObj.defaultFriction = val;
     syncJsonText();
   });
-  controls.gapInput = makeNumberInput(card, 'Default Gap (mm)', configObj.defaultGap ?? 0, '0.1', (val) => {
+  controls.gapInput = makeNumberInput(card, 'Legacy Gap (mm) — non-Step 7 only; set restraint Gap in 7 Support Type Mapper', configObj.defaultGap ?? 0, '0.1', (val) => {
     configObj.defaultGap = val;
     syncJsonText();
   });
