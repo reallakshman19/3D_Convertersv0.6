@@ -8,6 +8,7 @@
  * The application owns active job/selection cancellation.
  */
 import {runStandaloneResolverJsonTrace} from '../xml-cii-resolver-json-trace.js';
+import {buildStagedJsonTraceSidecar,compareStagedJsonTraceSidecar,sidecarConfigForTraceResult,traceMemberAssignments,compareSidecarXmlAssignments} from '../xml-cii-staged-json-trace-sidecar.js';
 import {installWeightBasisXmlDom} from './weight-basis-xml-dom.js';
 import {prepareXml229PrefinalRestraints} from '../integration/xml229-prefinal-restraints.mjs';
 installWeightBasisXmlDom(globalThis);
@@ -37,7 +38,7 @@ async function run(m){
    typeof m.sourceText!=='string'||!m.sourceText.trim())
    throw Object.assign(new Error('original source/index/XML basis required'),{code:'DOMAIN_BASIS'});
  active={jobId:id,ref:m.sourceRefId,sha:m.sourceSha256,revision:m.sourceRevision,
-   selectionDigest:m.selectionDigest,rows:null,result:null,exports:new Map(),nonce:0};
+   selectionDigest:m.selectionDigest,rows:null,result:null,exports:new Map(),nonce:0,originalBlob:m.jsonBlob};
  send('RUNNING',id,{phase:'EXACT_SOURCE_DOMAIN'});
  // Reads and parses only inside this independent Worker, never in UI.
  const json=await m.jsonBlob.text();
@@ -93,12 +94,28 @@ function page(m){
  send('PAGE',m.jobId,{type,start,rows:active.rows[type].slice(start,start+limit),
    total:active.rows[type].length});
 }
-function exportCsv(m){
+async function originalSidecar(){
+ const blob=active.originalBlob;
+ // The original committed Blob remains the only source; never export from
+ // matched XML rows or a grouped evidence list.
+ return buildStagedJsonTraceSidecar(await blob.text(),sidecarConfigForTraceResult(active.result));
+}
+async function compareSidecar(m){
+ if(!same(m)||!active?.result)throw Object.assign(Error('Source not ready'),{code:'DOMAIN_NOT_READY'});
+ if(!Array.isArray(m.rows)||m.rows.length>2000000||!Array.isArray(m.assignments))throw Object.assign(Error('Invalid imported table'),{code:'DOMAIN_SIDECAR_COMPARE_INPUT'});
+ const out=await originalSidecar();
+ const benchmark=compareStagedJsonTraceSidecar(out.memberRows,m.rows);
+ benchmark.xmlAssignments=compareSidecarXmlAssignments(traceMemberAssignments(active.result),m.assignments);
+ send('COMPARE_SIDECAR',m.jobId,{benchmark});
+}
+async function exportCsv(m){
  if(!same(m)||!active?.result)return fail(m.jobId,{code:'DOMAIN_NOT_READY'});
- const type=m.type==='evidence'?'evidence':'node';
- const rows=active.rows[type];
+ const type=m.type;
+ if(!['node','evidence','sidecar'].includes(type))return fail(m.jobId,{code:'DOMAIN_EXPORT_TYPE'});
+ const sidecar=type==='sidecar'?await originalSidecar():null;
+ const rows=sidecar?.memberRows||active.rows[type];
  if(!rows.length)return fail(m.jobId,{code:'DOMAIN_EMPTY_EXPORT'});
- const csv=type==='evidence'?buildEvidenceTreeCsv(active.result):buildXmlNodeWiseTraceCsv(active.result);
+ const csv=sidecar?sidecar.csv:type==='evidence'?buildEvidenceTreeCsv(active.result):buildXmlNodeWiseTraceCsv(active.result);
  const bytes=new TextEncoder().encode(csv);
  const token=++active.nonce;
  const stream={token,type,bytes,offset:0};
@@ -131,7 +148,8 @@ onmessage=async({data:m})=>{
      send('PATH_PAGE',m.jobId,{start,paths:active.paths.slice(start,start+128),
        total:active.paths.length});return;
    }
-   if(m.kind==='EXPORT'){exportCsv(m);return;}
+   if(m.kind==='EXPORT'){await exportCsv(m);return;}
+   if(m.kind==='COMPARE_SIDECAR'){await compareSidecar(m);return;}
    if(m.kind==='EXPORT_ACK'&&same(m)){
      const stream=active.exports.get(m.token);
      if(stream)chunk(stream);
