@@ -73,6 +73,7 @@ export async function openXml229EngineeringFactModel({
     fail('ORIGINAL_INPUT_REQUIRED','Original XML, basis, live master bytes and real Preview result required');
   if(!Number.isSafeInteger(maxPhysical)||maxPhysical<1||maxPhysical>100000)
     fail('INVALID_BOUNDED_POPULATION','Physical Worker window cap must be 1..100000');
+  onProgress('physical-field-source-master-attestation');
   await attestLiveBasis({...live,basis});
   if(live.sources?.[sourceId]!==xmlText||basis.sourceRefs?.length!==1||
     basis.sourceRefs[0]?.sourceId!==sourceId||basis.scope?.length!==1||
@@ -115,6 +116,7 @@ export async function openXml229EngineeringFactModel({
   const sourceNodeByOrdinal=new Map(projection.nodes.map(row=>[
     JSON.stringify([row.branchOccurrenceIndex,row.nodeOrdinal]),row]));
   const boreRows=indexXml229PhysicalBores(previewResult.nodeBoreWallRows,sourceNodeByOrdinal,fail);
+  onProgress('physical-field-component-body-bore-index');
   const bodyBores=indexXml229ComponentBodyBores({
     xmlText,config:workConfig,sourceDocument:restraintStage.document,
   });
@@ -178,6 +180,7 @@ export async function openXml229EngineeringFactModel({
       nonOwnerEndpointStarts.add(JSON.stringify([bi,original.sourceNodeOrdinal]));
     }
   }
+  onProgress('physical-field-record-construction');
   const originalCensus=[],physical=[],expected=[];
   const records=[];
   const add=(occ,fieldId,val,authority,unit,detail)=>{
@@ -278,6 +281,7 @@ export async function openXml229EngineeringFactModel({
     'physical-component':['bore.mm','length.mm','rating','mass.kg','component.type','component.ref'],
   };
   const ports={assertBasisDigest,canonicalJson,digestCanonical,validateFactRecord,validatePage};
+  onProgress('physical-field-fact-model-verification');
   const model=await openPreviewFactReadModel({
     basis,expectedOccurrences:expected,records,ports,requiredEngineeringFields,
     verifyEngineeringComplete:({records:verified,expectedOccurrences:originals})=>
@@ -292,6 +296,7 @@ export async function openXml229EngineeringFactModel({
   // retained-by-branch ledger; the Worker binds it to the GC-PW source basis.
   if(typeof XMLSerializer!=='function')
     fail('FINALIZED_GEOMETRY_SERIALIZER_REQUIRED','XML serializer unavailable');
+  onProgress('physical-field-finalized-geometry');
   const finalizedGeometry=await finalizeXml229WeightGeometry({
     basis,projection,branches,prepared,physical,sourceNodeByOrdinal,
     nonOwnerEndpointStarts,componentSuppressionPairs:canonicalEndpointPairs,sourceId,
