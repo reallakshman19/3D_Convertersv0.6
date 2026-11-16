@@ -145,6 +145,10 @@ def kinds(entries, require, config=None):
             node_type_mutation(a, config), '')
         if node_type_kind and not approval:
             node_type_user_row_conflict(a, config, node_type_kind)
+            # A legacy Tab 7 custom alias contradicting an authored NODETYPE
+            # must fail closed too; source type has precedence over a keyword.
+            configured_mapper_semantic_conflict(a, e['desc'], config,
+                                                node_type_kind, require)
         table_kind = '' if node_type_kind else owner_rule_kind(a, config)[0]
         if table_kind:
             # A Step 7 table answer must still agree with edited Tab 7 keywords.
