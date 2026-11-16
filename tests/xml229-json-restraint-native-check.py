@@ -51,6 +51,9 @@ for before, after in [('<Gap>6</Gap>', '<Gap>9</Gap>'),
     assert before in changed['finalizedGeometry']['xmlText']
     changed['finalizedGeometry']['xmlText'] = changed['finalizedGeometry']['xmlText'].replace(before, after, 1)
     challenge(changed)
+held = deepcopy(packet)
+held['finalizedGeometry']['prefinalRestraints']['engineeringRestraintAcceptance'] = 'HOLD'
+challenge(held, code='NATIVE_PREFINAL_RESTRAINT_REVIEW_HOLD')
 challenge(packet, {**config, 'defaultGap': 9})
 challenge(packet, {**config, 'defaultFriction': .3})
 challenge(packet, {**config, 'defaultStiffness': 987})

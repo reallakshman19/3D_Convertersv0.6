@@ -135,6 +135,7 @@ export async function runPreviewButtonSession({
   };
   const retry=()=>void runPreviewButtonSession({host,rootEl,xmlText,config,options,renderResult});
   const begun=Date.now();
+  recordPreviewFailure(null);
   try {
     // Validate explicit original scope before reading JSON or dispatching any Worker.
     const scope=sourceScope(host,config,options);
@@ -201,7 +202,7 @@ export async function runPreviewButtonSession({
         evidence.setAttribute('data-mc-preview-verified-engineering','');
         evidence.setAttribute('role','status');
         evidence.className='model-converters-workflow-detail-note';
-        evidence.textContent='Verified original engineering Preview: '+
+        evidence.textContent=(result.restraintReview?.status==='HOLD'?'Source-verified Preview / Weight facts — restraint acceptance HOLD: ':'Verified original engineering Preview: ')+
           proof.verifiedPhysicalCount+' physical components / '+
           proof.verifiedFactCount+' complete FactRecords. '+
           'Weight Match uses this same session; native CII Run remains HELD.';

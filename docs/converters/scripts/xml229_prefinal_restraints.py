@@ -187,9 +187,19 @@ def kinds(entries, require, config=None):
             configured_mapper_semantic_conflict(a,e['desc'],config,preferred,require)
         if node_type_kind and not (approval or preferred):
             node_type_user_row_conflict(a, config, node_type_kind)
+            configured_mapper_semantic_conflict(a, e['desc'], config,
+                                                node_type_kind, require)
+        # Always parse user rules, even for source-owned types, so an invalid
+        # regex or contradictory equal-priority match cannot evade review.
+        custom_kind = configured_support_rule(a, e['desc'], config, require)
+        if node_type_kind and custom_kind:
+            require(custom_kind == node_type_kind,
+                    'NATIVE_PREFINAL_RESTRAINT_KIND_AMBIGUOUS')
         table_kind = '' if node_type_kind else owner_rule_kind(a, config)[0]
         if table_kind:
-            # A Step 7 table answer must still agree with edited Tab 7 keywords.
+            if custom_kind:
+                require(custom_kind == table_kind,
+                        'NATIVE_PREFINAL_RESTRAINT_KIND_AMBIGUOUS')
             configured_mapper_semantic_conflict(a, e['desc'], config, table_kind, require)
         if node_type_kind or table_kind:
             kind = node_type_kind or table_kind
@@ -419,7 +429,9 @@ def node_type_mutation(attrs, config):
                 break
     return present_type(str(value))
 
-def append_profile(node, kind, attrs, config, allowed=None):
+def append_profile(node, kind, attrs, config, allowed=None, *, selected_source=False):
+    # Legacy callers pass selected_source; clearance authority is now owned
+    # exclusively by the explicit source-field precedence policy, not this flag.
     p = profile_for(kind, config)
     ns = node.tag.rsplit('}', 1)[0] + '}' if '}' in node.tag else ''
     d = direction(p, attrs, node)

@@ -1,0 +1,35 @@
+name: XML229 Preview restraint review
+on:
+  pull_request:
+    paths:
+      - 'tabs/xml-cii-2019-standalone/**'
+      - 'docs/tabs/xml-cii-2019-standalone/**'
+      - 'tests/xml229-preview-restraint-review-browser.mjs'
+      - 'tests/xml-cii-229-p4-real-engineering-fact-producer.test.mjs'
+      - '.github/workflows/xml229-preview-restraint-review.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  producer:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Strict Final and review-only Preview production computation
+        run: |
+          node --test --test-name-pattern='actual Preview producer quarantines' tests/xml-cii-229-p4-real-engineering-fact-producer.test.mjs
+          node --test tests/xml-cii-mds-position-restraints.test.mjs tests/xml-cii-staged-json-trace-sidecar.test.mjs tests/xml-cii-table-trace-source.test.js
+          node --test tests/xml229-json-restraint-body-transfer.test.mjs
+  browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --ignore-scripts playwright@1.52.0
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/xml229-preview-restraint-review-browser.mjs

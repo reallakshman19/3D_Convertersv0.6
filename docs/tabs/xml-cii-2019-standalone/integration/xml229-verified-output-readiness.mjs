@@ -96,6 +96,10 @@ export function projectXml229RunChecklist(input,rows,verifiedEngineering=null) {
             ']. No Preview/Weight evidence accepted. Open 4 Preview → Build Preview to reverify the current source and masters.'
           : 'Original engineering 4 Preview is not verified for the current source and masters. Open 4 Preview → Build Preview.',
       });
+      if(proof.engineeringRestraintAcceptance==='HOLD')return rowUpdated(row,{
+        label:'Original Preview — restraints For Review',status:'held',severity:'warning',blocking:false,
+        message:'Independent physical facts are verified. Source restraint conflicts remain unresolved; Preview and Weight review can continue, native Final is HELD.',
+      });
       return rowUpdated(row,{
         label:'Original Preview engineering facts',status:'ready',severity:'ok',blocking:false,
         message:'Verified current 4 Preview: '+proof.verifiedPhysicalCount+

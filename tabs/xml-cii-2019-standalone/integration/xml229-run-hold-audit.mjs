@@ -114,6 +114,7 @@ function classify({hold,source,sessionState,proofValid,proof,readError,
   if(readError)return 'WORKER_READ_FAILED';
   if(!proof)return 'WORKER_COMPLETION_NOT_READ';
   if(!proofValid)return 'WORKER_COMPLETION_REJECTED';
+  if(proof.engineeringRestraintAcceptance==='HOLD')return 'PREFINAL_RESTRAINT_REVIEW_HOLD';
   const c=proof.counts;
   if(c.unresolved>0)return 'UNRESOLVED_PHYSICAL_MASS';
   if(c.match1>0)return 'MATCH1_NOT_FINAL';

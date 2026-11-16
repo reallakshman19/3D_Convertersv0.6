@@ -102,6 +102,9 @@ function rowMember(row) {
     supportReference: row.supportReference,
     componentSpec: row.componentSpec,
     site: row.site,
+    nodeType:row.nodeType,nodeGap:row.nodeGap,mdsFunction:row.mdsFunction,mdsType:row.mdsType,
+    catalogueType:row.catalogueType,memberRef:row.memberRef,attachedComponentRef:row.attachedComponentRef,
+    sourceOrdinal:row.sourceOrdinal,sourceAttributes:row.sourceAttributes,sourceMember:row.sourceMember,
     raw: row.raw,
   };
 }

@@ -43,6 +43,42 @@ export function recordPreviewRestraintReview(value){
 }
 export function lastPreviewRestraintReview(){return review;}
 
+/** Only a completed source-bound quarantine result is a review warning.
+ * Never infer review severity from a broad error-code prefix. */
+export function showRestraintReview(panel,review) {
+  if(!panel)return;
+  panel.querySelector('[data-restraint-review]')?.remove();
+  if(review?.status!=='HOLD'&&review?.status!=='FOR_REVIEW'&&review?.status!=='REVIEW_BLOCKED')return;
+  const section=document.createElement('section');
+  section.dataset.restraintReview='true';
+  section.setAttribute('role',['HOLD','FOR_REVIEW'].includes(review.status)?'status':'alert');
+  section.style.cssText=['HOLD','FOR_REVIEW'].includes(review.status)
+    ?'color:#92400e;background:#fffbeb;border:1px solid #d97706;padding:8px;border-radius:5px;'
+    :'color:#fecaca;background:#451a1a;border:1px solid #ef4444;padding:8px;border-radius:5px;';
+  const title=document.createElement('p');
+  const warnings=Array.isArray(review.warnings)?review.warnings:[];
+  title.textContent=['HOLD','FOR_REVIEW'].includes(review.status)
+    ?'FOR REVIEW — '+warnings.length+' source restraint conflict(s). Trace and Preview remain available; independent Weight review may continue. Engineering restraint acceptance and native Final are HELD.'
+    :'Restraint review blocked: '+String(review.code||'')+' — '+String(review.error||'');
+  section.append(title);
+  if(warnings.length){
+    const details=document.createElement('details');
+    const summary=document.createElement('summary');
+    summary.textContent='Source-bound conflicts (XML node / JSON member)';
+    details.append(summary);
+    const list=document.createElement('ul');
+    for(const row of warnings){
+      const li=document.createElement('li');
+      li.textContent='XML Node '+String(row.nodeNumber||'?')+' — '+String(row.branchName||'')+
+        ' — '+String(row.message||row.code||'')+
+        (row.member?.path?' — '+row.member.path:'');
+      list.append(li);
+    }
+    details.append(list);section.append(details);
+  }
+  panel.append(section);
+}
+
 function paintStatus(panel){
  if(!panel)return;
  let blocked=panel.querySelector('[data-preview-blocker]');

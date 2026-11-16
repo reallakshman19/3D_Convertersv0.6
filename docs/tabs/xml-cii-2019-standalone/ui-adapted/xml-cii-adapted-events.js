@@ -1,6 +1,6 @@
 import { runStandaloneRegexTester } from '../xml-cii-regex-tester.js';
 import { runStandaloneResolverJsonTrace } from '../xml-cii-resolver-json-trace.js';
-import { buildStagedJsonTraceSidecar } from '../xml-cii-staged-json-trace-sidecar.js';
+import { buildStagedJsonTraceSidecar,sidecarConfigForTraceResult,compareStagedJsonTraceSidecar,traceMemberAssignments,compareSidecarXmlAssignments } from '../xml-cii-staged-json-trace-sidecar.js';
 import { closeGovernedMdsPositionRestraintsXml } from '../xml-cii-mds-restraint-closure.js';
 import { runStandaloneManualElementSideload } from '../xml-cii-manual-element-sideload.js';
 import { buildStandalonePreviewDiagnosticsAudit } from '../xml-cii-preview-diagnostics-audit.js';
@@ -263,6 +263,7 @@ export async function runResolverJsonTraceFromUi(container, stateRef, render, sa
   if (tx) stateRef.current = updateResolverJsonTraceConfig(stateRef.current, tx.value);
   const sourceText = await sourceTextFromState(stateRef.current);
   const stagedJsonText = await stagedJsonTextFromState(stateRef.current);
+  const rawResult = runStandaloneResolverJsonTrace({ ...stateRef.current, sourceText, stagedJsonText, jsonConfig: stateRef.current.resolverJsonTraceConfig });
   let sidecar=null,sidecarError='';
   let sidecarFileName='staged-json-trace-sidecar.csv';
   if (stagedJsonText.trim()) {
@@ -270,12 +271,10 @@ export async function runResolverJsonTraceFromUi(container, stateRef, render, sa
       const baseName=String(stateRef.current.stagedJsonFile?.name || 'staged-json')
         .replace(/\.(json|txt)$/i, '').replace(/[^A-Za-z0-9._-]+/g,'_').slice(0,90);
       sidecarFileName=baseName+'-trace-sidecar.csv';
-      const cfg=stateRef.current.resolverJsonTraceConfig || {};
-      sidecar=buildStagedJsonTraceSidecar(stagedJsonText,{resolverJsonTrace:cfg,
-        dtxrPositionOffset:cfg.dtxrPositionOffset});
+      sidecar=buildStagedJsonTraceSidecar(stagedJsonText,sidecarConfigForTraceResult(rawResult,stateRef.current.resolverJsonTraceConfig));
     } catch(error) { sidecarError=String(error?.message || error); }
   }
-  const rawResult = runStandaloneResolverJsonTrace({ ...stateRef.current, sourceText, stagedJsonText, jsonConfig: stateRef.current.resolverJsonTraceConfig });
+
   // Review-only quarantine: preserve original restraints and keep successful
   // resolver indexing available even when a single source support conflicts.
   // The native pre-Final stage remains strict and cannot consume this flag.
@@ -299,9 +298,14 @@ export async function runResolverJsonTraceFromUi(container, stateRef, render, sa
     }
   }
   const result = { ...rawResult, restraintReview };
-  const benchmark = stateRef.current.resolverJsonTraceTableResult
-    ? compareTraceResultsByComponentRef(result, stateRef.current.resolverJsonTraceTableResult)
-    : stateRef.current.jsonTraceTableBenchmark;
+  const table=stateRef.current.resolverJsonTraceTableResult;
+  let benchmark=null;
+  if(table){
+    if(sidecar&&table.rawRows?.some(row=>Object.hasOwn(row,'JSON source path')||Object.hasOwn(row,'Source member JSON'))){
+      benchmark=compareStagedJsonTraceSidecar(sidecar.memberRows,table.rawRows);
+      benchmark.xmlAssignments=compareSidecarXmlAssignments(traceMemberAssignments(result),traceMemberAssignments(table));
+    }else benchmark=compareTraceResultsByComponentRef(result,table);
+  }
   const sidecarState={
     jsonTraceSidecarCsv:sidecar?.csv || '',
     jsonTraceSidecarFileName:sidecarFileName,

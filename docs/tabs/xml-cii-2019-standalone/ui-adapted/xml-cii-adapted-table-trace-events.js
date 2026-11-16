@@ -13,6 +13,9 @@ import {
   rowsToTraceTableText,
 } from '../xml-cii-table-trace-source.js';
 import { REQUIRED_TRACE_TABLE_FIELD_NAMES } from '../xml-cii-table-trace-table.js';
+import {buildStagedJsonTraceSidecar,compareStagedJsonTraceSidecar,sidecarConfigForTraceResult,traceMemberAssignments,compareSidecarXmlAssignments} from '../xml-cii-staged-json-trace-sidecar.js';
+import {runStandaloneResolverJsonTrace} from '../xml-cii-resolver-json-trace.js';
+import {compareCurrentLfjO1Sidecar} from './xml-cii-adapted-lfj-o1-domain-ui.js';
 import {
   activeProfileFor,
   normalizeTraceTableConfig,
@@ -57,9 +60,10 @@ async function parseTraceFile(file) {
   return { tableText: rowsToTraceTableText(rows), rows, sheetNames, activeSheet, workbookData };
 }
 
+const isSidecar=rows=>rows?.some(row=>['JSON source path','JSON ordinal','Source attributes JSON','Source member JSON'].some(key=>Object.hasOwn(row,key)));
 function buildFieldMap(rows, previousMap, traceConfig) {
   const headers = headersFromTraceRows(rows);
-  if (previousMap && REQUIRED_TABLE_FIELD_NAMES.every((fieldName) => previousMap[fieldName] && headers.includes(previousMap[fieldName]))) return previousMap;
+  if (!isSidecar(rows) && previousMap && REQUIRED_TABLE_FIELD_NAMES.every((fieldName) => previousMap[fieldName] && headers.includes(previousMap[fieldName]))) return previousMap;
   return autoMapTraceTableFields(headers, rows, traceConfig);
 }
 
@@ -74,6 +78,7 @@ function applyRowsToState(state, rows, tableText, sourceName, extra) {
     jsonTraceTableFieldMap: fieldMap,
     jsonTraceTableConfig: traceConfig,
     jsonTraceTableSourceName: sourceName,
+    resolverJsonTraceTableResult:null,jsonTraceTableBenchmark:null,
     jsonTraceTableStatus: `Parsed ${rows.length} table row(s). Profile ${profile.label} (${profile.confidence}%). Review mapping before building trace.`,
   });
 }
@@ -85,7 +90,7 @@ function currentJsonResult(state) {
 
 function benchmarkFor(state, tableResult) {
   const jsonResult = currentJsonResult(state);
-  return jsonResult ? compareTraceResultsByComponentRef(jsonResult, tableResult) : null;
+  return !isSidecar(tableResult.rawRows)&&jsonResult ? compareTraceResultsByComponentRef(jsonResult, tableResult) : null;
 }
 
 function buildTableTraceState(state) {
@@ -114,6 +119,33 @@ function buildTableTraceState(state) {
   });
 }
 
+async function compareSidecarState(stateRef,render){
+  const state=stateRef.current,table=state.resolverJsonTraceTableResult;
+  if(!table||!isSidecar(table.rawRows))return false;
+  try{
+    let benchmark=await compareCurrentLfjO1Sidecar(stateRef,table.rawRows,traceMemberAssignments(table));
+    if(!benchmark){
+      // Never parse the indexed O1 source on the main thread or use stale
+      // cached trace output as a substitute for the original source.
+      if(state.xml229StagedSourceReceipt)throw Error('Build current O1 JSON trace before comparing.');
+      const staged=state.stagedJsonText||await state.stagedJsonFile?.text?.();
+      if(!staged)throw Error('Load the original staged JSON before comparing.');
+      const jsonResult=runStandaloneResolverJsonTrace({...state,stagedJsonText:staged,jsonConfig:state.resolverJsonTraceConfig});
+      const source=buildStagedJsonTraceSidecar(staged,sidecarConfigForTraceResult(jsonResult,state.resolverJsonTraceConfig));
+      benchmark=compareStagedJsonTraceSidecar(source.memberRows,table.rawRows);
+      benchmark.xmlAssignments=compareSidecarXmlAssignments(traceMemberAssignments(jsonResult),traceMemberAssignments(table));
+    }
+    if(stateRef.current!==state)return true;
+    stateRef.current=updateWorkflowState(state,{jsonTraceTableBenchmark:benchmark,
+      jsonTraceTableStatus:'Member round-trip: '+benchmark.matched+'/'+benchmark.compared+
+        '; '+benchmark.mismatched+' differences. XML assignment differences: '+benchmark.xmlAssignments.mismatched+'.'});
+  }catch(error){
+    if(stateRef.current!==state)return true;
+    stateRef.current=updateWorkflowState(state,{jsonTraceTableBenchmark:null,jsonTraceTableStatus:'Sidecar comparison unavailable: '+String(error.message||error)});
+  }
+  render();return true;
+}
+
 function compareTraceState(state) {
   const tableResult = state.resolverJsonTraceTableResult;
   const jsonResult = currentJsonResult(state);
@@ -135,6 +167,7 @@ function updateTextState(state, value) {
 function updateMapState(state, fieldName, header) {
   return updateWorkflowState(state, {
     jsonTraceTableFieldMap: { ...(state.jsonTraceTableFieldMap || {}), [fieldName]: header },
+    resolverJsonTraceTableResult:null,jsonTraceTableBenchmark:null,
     jsonTraceTableStatus: `Mapped ${fieldName} -> ${header || '(none)'}.`,
   });
 }
@@ -152,6 +185,7 @@ function updateTraceProfileState(state, profileId) {
     jsonTraceTableRows: rows,
     jsonTraceTableConfig: traceConfig,
     jsonTraceTableFieldMap: autoMapTraceTableFields(headers, rows, traceConfig),
+    resolverJsonTraceTableResult:null,jsonTraceTableBenchmark:null,
     jsonTraceTableStatus: `Trace profile set to ${profile.label}. Auto-mapped ${rows.length} row(s).`,
   });
 }
@@ -160,6 +194,7 @@ function updateTraceConfigState(state, patch) {
   const traceConfig = normalizeTraceTableConfig({ ...(state.jsonTraceTableConfig || {}), ...patch });
   return updateWorkflowState(state, {
     jsonTraceTableConfig: traceConfig,
+    resolverJsonTraceTableResult:null,jsonTraceTableBenchmark:null,
     jsonTraceTableStatus: 'Trace import configuration updated. Rebuild table trace to apply it.',
   });
 }
@@ -213,6 +248,7 @@ export function bindTraceTableEvents(container, stateRef, render) {
       jsonTraceTableRows: rows,
       jsonTraceTableConfig: traceConfig,
       jsonTraceTableFieldMap: autoMapTraceTableFields(headersFromTraceRows(rows), rows, traceConfig),
+      resolverJsonTraceTableResult:null,jsonTraceTableBenchmark:null,
       jsonTraceTableStatus: `Auto-mapped ${rows.length} table row(s).`,
     });
     render();
@@ -240,12 +276,14 @@ export function bindTraceTableEvents(container, stateRef, render) {
     });
   });
 
-  container.querySelector('[data-action="build-json-trace-table"]')?.addEventListener('click', () => {
+  container.querySelector('[data-action="build-json-trace-table"]')?.addEventListener('click', async () => {
     stateRef.current = buildTableTraceState(stateRef.current);
     render();
+    await compareSidecarState(stateRef,render);
   });
 
-  container.querySelector('[data-action="compare-json-trace-table"]')?.addEventListener('click', () => {
+  container.querySelector('[data-action="compare-json-trace-table"]')?.addEventListener('click', async () => {
+    if(await compareSidecarState(stateRef,render))return;
     stateRef.current = compareTraceState(stateRef.current);
     render();
   });
