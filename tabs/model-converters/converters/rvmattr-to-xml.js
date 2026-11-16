@@ -258,7 +258,8 @@ function buildRvmAttrResponseFromAttText(attText, inputName, options) {
   // not from wildcard-only label matching or a branch-derived prefix guess.
   const nativeFiltered = nativeScope?.mode === 'SELECTED';
   const structCandidates = parseRmssStructuralMembers(
-    attText, nativeFiltered ? { nativeRules: nativeScope.rules } : {},
+    attText, { ...(nativeFiltered ? { nativeRules: nativeScope.rules } : {}),
+      normalizeAttRvmMdsMembers: true },
   );
   const structMembers = nativeFiltered ? structCandidates
     : filterStpMembersByScope(structCandidates, scope.scope);
@@ -288,6 +289,7 @@ function buildRvmAttrResponseFromAttText(attText, inputName, options) {
         `ATT/TXT parsed into ${xmlFromAtt.branchCount} branch(es).`,
         `Generated ${xmlFromAtt.nodeCount} node(s) into PSI-style XML.`,
         `Support mapper conversion pass: scanned=${xmlFromAtt.supportMapperStats?.scanned || 0}, mapped=${xmlFromAtt.supportMapperStats?.mapped || 0}.`,
+        `MDS member NODETYPE corrections: ${xmlFromAtt.supportMapperStats?.correctedMdsNodeTypes || 0}.`,
         ...(attStpText ? [`Generated STP for ${structMembers.length > 0 ? 'structural' : 'pipeline support'} members.`] : []),
       ].filter(Boolean),
       stderr: xmlFromAtt.skippedComponents > 0
@@ -322,7 +324,9 @@ export async function run(context) {
     };
   }
 
-  const runValues = { ...context.options };
+  // Only this export normalizes corroborated MDS member codes; generic staged
+  // JSON conversion and XML->CII source authority remain unchanged.
+  const runValues = { ...context.options, normalizeAttRvmMdsMembers: true };
 
   // ATT/TXT-only mode: produce XML+JSON from attributes; STP skipped (no geometry)
   if (!rvmFile && attFile) {
@@ -370,6 +374,7 @@ export async function run(context) {
                   rvmScopeLogLine(stagedResult.scopeStats),
                   `Staged hierarchy detected: ${stagedResult.branchCount} branch(es), ${stagedResult.nodeCount} node(s).`,
                   `Support mapper conversion pass: scanned=${stagedResult.supportMapperStats?.scanned || 0}, mapped=${stagedResult.supportMapperStats?.mapped || 0}.`,
+                  `MDS member NODETYPE corrections: ${stagedResult.supportMapperStats?.correctedMdsNodeTypes || 0}.`,
                 ].filter(Boolean),
                 stderr: stagedResult.skippedComponents > 0
                   ? [`Skipped ${stagedResult.skippedComponents} component(s) with incomplete coordinates.`]
@@ -392,7 +397,7 @@ export async function run(context) {
               let stpText = null;
               if (secondary && secondaryBytes) {
                 const attText = decodeTextUtf8(secondaryBytes);
-                const structMembers = filterStpMembersByScope(parseRmssStructuralMembers(attText), stagedResult.rvmScope || stagedResult.scopePattern);
+                const structMembers = filterStpMembersByScope(parseRmssStructuralMembers(attText, { normalizeAttRvmMdsMembers: true }), stagedResult.rvmScope || stagedResult.scopePattern);
                 if (structMembers.length > 0) {
                   stpText = buildStpTextFromMembers(structMembers, `${stem}_supports.stp`);
                 }
