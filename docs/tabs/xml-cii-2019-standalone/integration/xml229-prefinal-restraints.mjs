@@ -87,6 +87,8 @@ export async function prepareXml229PrefinalRestraints({
   return {document,restraintReview,
     proof:Object.freeze({schema:enabled?'XML229.PrefinalRestraints.v2':'XML229.PrefinalRestraints.v1',
     originalJsonSha256:await digestUtf8(stagedJsonText),restraintAudit,
+    engineeringRestraintAcceptance:restraintReview.engineeringRestraintAcceptance,
+    restraintReviewStatus:restraintReview.status,
     ...(warnings.length?{engineeringRestraintAcceptance:'HOLD'}:{}),
     ...(enabled?{physicalVertexMemberCensus:vertex.proofSummary}:{})}),
     stats:{...resolved?.stats,...fallback.stats,...(enabled?vertex.proofSummary:{})}};
