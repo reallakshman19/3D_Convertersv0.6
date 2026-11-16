@@ -23,6 +23,7 @@ export function createDefaultResolverJsonTraceConfig() {
     posAliases: ['DTXR_POS', 'POSI', 'POS', 'APOS', 'LPOS', 'BPOS', 'HPOS', 'TPOS', 'SPOS', 'EPOS', 'SUPPORTCOORD'],
     captureFields: DEFAULT_JSON_TRACE_CAPTURE_FIELDS.map((field) => ({ ...field })),
     coordinateTolerance: 6.0,
+    exportTraceSidecar: true,
     matchMode: 'POS',
     psFallback: { stripSuffixes: [...DEFAULT_PS_STRIP_SUFFIXES] },
     dtxrPositionOffset: {enabled:false,xOffset:0,yOffset:0,zOffset:100000},
@@ -53,6 +54,7 @@ function configFrom(input = {}) {
     posAliases: arrayOr(source.posAliases, defaults.posAliases),
     captureFields: normalizeJsonTraceCaptureFields(source.captureFields),
     coordinateTolerance: Number(source.coordinateTolerance ?? defaults.coordinateTolerance) || defaults.coordinateTolerance,
+    exportTraceSidecar: source.exportTraceSidecar !== false,
     matchMode: normalizeResolverMatchMode(source.matchMode ?? defaults.matchMode),
     psFallback: {
       stripSuffixes: normalizePsStripSuffixes(
