@@ -198,6 +198,46 @@ function renderDelimiterControls(parent, state) {
   if (note.style) note.style.fontSize = '11px';
   bar.appendChild(note);
 
+
+  // Explicit grouping modes. ROOT deliberately bypasses PS regex and suffix rules.
+  const matchLabel = createElement('label');
+  if (matchLabel.style) Object.assign(matchLabel.style, { display: 'flex', alignItems: 'center', gap: '4px' });
+  matchLabel.appendChild(createElement('span', 'Group via:'));
+  const matchSelect = createElement('select');
+  matchSelect.dataset.field = 'resolver-match-mode';
+  matchSelect.title = 'POS: aligned 3D coordinate within tolerance. PS: configurable suffix-normalized PS identifier. Root: literal support root, without regex or position matching.';
+  for (const [value, label] of [
+    ['POS', 'POS — coordinate (preferred)'],
+    ['PS', 'PS — suffix-normalized'],
+    ['ROOT', 'Root — support reference (no regex)'],
+  ]) {
+    const option = createElement('option', label);
+    option.value = value;
+    option.selected = (cfg.matchMode || 'POS').toUpperCase() === value;
+    matchSelect.appendChild(option);
+  }
+  matchLabel.appendChild(matchSelect);
+  bar.appendChild(matchLabel);
+
+  const suffixLabel = createElement('label');
+  if (suffixLabel.style) Object.assign(suffixLabel.style, { display: 'flex', alignItems: 'center', gap: '4px' });
+  suffixLabel.appendChild(createElement('span', 'PS strip suffixes:'));
+  const suffixInput = createElement('input');
+  suffixInput.type = 'text';
+  suffixInput.dataset.field = 'resolver-ps-suffixes';
+  suffixInput.value = (cfg.psFallback?.stripSuffixes || ['.1.2', '.1', '-1', '_1']).join(', ');
+  suffixInput.disabled = (cfg.matchMode || 'POS').toUpperCase() !== 'PS';
+  suffixInput.title = 'Comma-separated terminal PS suffixes. Numeric wildcard N is supported, e.g. .N, .N.N, -N, _N. No suffix rules are applied in POS or Root mode.';
+  if (suffixInput.style) Object.assign(suffixInput.style,
+    { width: '215px', padding: '2px 6px', fontFamily: 'monospace', fontSize: '12px',
+      background: '#1a2840', color: '#d7e6ff', border: '1px solid #2a3f5f', borderRadius: '4px' });
+  suffixLabel.appendChild(suffixInput);
+  bar.appendChild(suffixLabel);
+  const modeNote = createElement('span',
+    'POS uses datum + tolerance; PS uses only suffix rules; Root uses literal source root (no regex).',
+    'xml-cii-phase-help');
+  bar.appendChild(modeNote);
+
   const tolLabel = createElement('label');
   if (tolLabel.style) Object.assign(tolLabel.style, { display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '6px', borderLeft: '1px solid rgba(148,163,184,0.15)', paddingLeft: '10px' });
   tolLabel.appendChild(createElement('span', '📏 Coord tolerance (mm):'));
@@ -233,7 +273,7 @@ function renderDelimiterControls(parent, state) {
   datumValue.dataset.field = 'resolver-datum-offset-u-mm';
   datumValue.value = String(datum.zOffset ?? 100000);
   datumValue.step = '0.1';
-  datumValue.title = 'Adds this signed U/Z offset to staged POSI before source-coordinate matching; leaves pipe geometry untouched.';
+  datumValue.title = 'Adds this signed U/Z offset to the selected staged coordinate (POS, POSI, or other position alias) before POS matching; leaves pipe geometry untouched.';
   if (datumValue.style) Object.assign(datumValue.style,
     {width:'100px',padding:'2px 6px',fontFamily:'monospace',fontSize:'12px',
      background:'#1a2840',color:'#d7e6ff',border:'1px solid #2a3f5f',borderRadius:'4px'});
