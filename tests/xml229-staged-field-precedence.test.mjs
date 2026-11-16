@@ -293,3 +293,26 @@ test('Step 3 field precedence: real exporter receipt, profile gap fallback, JSON
  assert.equal((await stage(invalid,config,'preview')).restraintReview.status,'FOR_REVIEW');
  assert.throws(()=>native(invalid,config),/NATIVE_PREFINAL_RESTRAINT_GAP_INVALID/);
 });
+
+test('Node Type priority and fallback are executable rather than display-only',async()=>{
+ const {DEFAULT_RESTRAINT_PRECEDENCE}=await import('../converters/xml-cii2019-core/restraint-precedence-policy.js');
+ const config={...all,xml229RestraintPrecedence:DEFAULT_RESTRAINT_PRECEDENCE};
+ const receipt=regenerated();
+ Object.assign(receipt[0].children[0].attributes,{SOURCE_NODETYPE:null,NODETYPE_CODES:['14'],NODETYPE_CLASSIFICATION_SOURCE:'STEP7_SUPPORT_MAPPING',SUPPORT_EFFECTIVE_NODETYPE:'14'});
+ const accepted=await stage(receipt,config,'preview');
+ assert.equal(accepted.restraintReview.status,'CLEAR');
+ assert.deepEqual(numericRows(native(receipt,config)),numericRows(rows(accepted.document)));
+ const missingRule=regenerated();
+ const rest=missingRule[0].children[0].attributes;
+ Object.assign(rest,{MDSSUPPFUNC:'UNKNOWN',MDSSUPPTYPE:'UNKNOWN',CMPSUPTYPE:'UNKNOWN'});
+ const held=await stage(missingRule,config,'preview');
+ assert.equal(held.restraintReview.status,'FOR_REVIEW');
+ assert.throws(()=>native(missingRule,config),/NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS/);
+ const fallback={...config,xml229RestraintPrecedence:{...DEFAULT_RESTRAINT_PRECEDENCE,nodeType:{primary:'supportMapper',fallback:'json'}}};
+ const resolved=await stage(missingRule,fallback,'preview');
+ assert.equal(resolved.restraintReview.status,'CLEAR');
+ assert.deepEqual(numericRows(native(missingRule,fallback)),numericRows(rows(resolved.document)));
+ const stale=regenerated();stale[0].children[2].attributes.NODETYPE_CODES=['9'];
+ assert.equal((await stage(stale,config,'preview')).restraintReview.status,'FOR_REVIEW');
+ assert.throws(()=>native(stale,config),/NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS/);
+});

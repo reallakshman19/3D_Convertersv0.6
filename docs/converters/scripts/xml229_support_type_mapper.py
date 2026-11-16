@@ -703,22 +703,35 @@ def mapped_code_precedence_applies(attrs, config):
 
 def staged_field_kind_decision(attrs, config, original_kind):
     """Explicit source-field precedence; no generated labels or NODETYPE rule."""
+    active_policy = restraint_precedence(config)
+    active = active_policy['nodeType'] if active_policy else None
     mode = node_type_uses_mapper(attrs,config)
+    is_support = any(k in attrs for k in ('NODETYPE','SOURCE_NODETYPE','NODETYPE_CODES','MDSSUPPTYPE','MDSSUPPFUNC','CMPSUPTYPE','SUPPORT_KIND','SUPPORT_TYPE','SUPPORT_MAPPER_KIND'))
+    if active and not is_support:
+        return ''
     if mode is False:
+        if active and not original_kind:
+            raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
         return ''
     policy = config.get('xml229SourceFieldPrecedence') or {}
     mapped = mapped_code_precedence_applies(attrs, config)
-    if (not mapped and mode is not True and policy.get('type') is not True) or not original_kind:
+    if (not mapped and mode is not True and policy.get('type') is not True) or (not original_kind and not active):
         return ''
-    if mapped and (not str(attrs.get('SOURCE_NODETYPE') or '').strip() or
+    if mapped and ((not active and not str(attrs.get('SOURCE_NODETYPE') or '').strip()) or
         str(attrs.get('NODETYPE_CLASSIFICATION_SOURCE') or '').strip() != 'STEP7_SUPPORT_MAPPING' or
         not isinstance(attrs.get('NODETYPE_CODES'),list) or len(attrs['NODETYPE_CODES'])!=1):
+        if active:
+            raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
         return ''
     evidence = {k:v for k,v in _owner_fields(attrs).items()
                 if k in ('SKEY','DESCRIPTION','DESC','CMPSUPTYPE','DTXR','MDSSUPPTYPE')}
     decision = _match_table_rules(evidence, table_rules(config))
     kind = decision['kind'] if decision else ''
-    if not kind or kind == original_kind:
+    if not kind:
+        if not active or (active['primary']=='supportMapper' and active['fallback']=='json' and original_kind):
+            return ''
+        raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
+    if not active and kind == original_kind:
         return ''
     expected = {'REST':'+Y','GUIDE':'GUI','LINESTOP':'LIM'}.get(kind)
     if not expected:
@@ -742,5 +755,7 @@ def staged_field_kind_decision(attrs, config, original_kind):
         if (mapped and str(codes[0]).strip()!=expected_code) or (proposal != expected_code or (effective and effective != expected_code) or
                 (codes is not None and (not isinstance(codes,list) or len(codes)!=1 or
                  str(codes[0]).strip()!=expected_code))):
+            if active:
+                raise ValueError('NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
             return ''
     return kind

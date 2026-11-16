@@ -29,7 +29,8 @@ export function withDefaultRestraintPrecedence(config={}){
  return {...config,xml229RestraintPrecedence:policy};
 }
 export function jsonNodeType(attrs){
- return Object.hasOwn(attrs,'SOURCE_NODETYPE')?attrs.SOURCE_NODETYPE:attrs.NODETYPE;
+ const raw=Object.hasOwn(attrs,'SOURCE_NODETYPE')?attrs.SOURCE_NODETYPE:attrs.NODETYPE;
+ return missing(raw)?null:raw;
 }
 export function nodeTypeUsesMapper(attrs,config){
  const p=restraintPrecedence(config)?.nodeType;
@@ -37,7 +38,7 @@ export function nodeTypeUsesMapper(attrs,config){
  return p.primary==='supportMapper'||(missing(jsonNodeType(attrs))&&p.fallback==='supportMapper');
 }
 export function jsonNodeTypeAttrs(attrs,config){
- return nodeTypeUsesMapper(attrs,config)===false?{...attrs,NODETYPE:jsonNodeType(attrs)}:attrs;
+ return restraintPrecedence(config)?{...attrs,NODETYPE:jsonNodeType(attrs)}:attrs;
 }
 function number(raw,field){
  const str=text(raw);

@@ -36,7 +36,8 @@ def restraint_precedence(config):
     return result
 
 def json_node_type(attrs):
-    return attrs.get('SOURCE_NODETYPE') if 'SOURCE_NODETYPE' in attrs else attrs.get('NODETYPE')
+    raw = attrs.get('SOURCE_NODETYPE') if 'SOURCE_NODETYPE' in attrs else attrs.get('NODETYPE')
+    return None if missing(raw) else raw
 
 def node_type_uses_mapper(attrs, config):
     policy = restraint_precedence(config)
@@ -46,7 +47,7 @@ def node_type_uses_mapper(attrs, config):
     return p['primary']=='supportMapper' or (missing(json_node_type(attrs)) and p['fallback']=='supportMapper')
 
 def json_node_type_attrs(attrs, config):
-    return {**attrs,'NODETYPE':json_node_type(attrs)} if node_type_uses_mapper(attrs,config) is False else attrs
+    return {**attrs,'NODETYPE':json_node_type(attrs)} if restraint_precedence(config) else attrs
 
 def number(raw, field):
     pattern = (r'(?:GAP\s*=\s*)?([-+]?(?:\d+\.?\d*|\.\d+)(?:[Ee][-+]?\d+)?)\s*(?:mm)?(?:\s+gap)?'

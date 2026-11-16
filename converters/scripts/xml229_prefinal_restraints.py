@@ -80,7 +80,7 @@ def mds_kind_conflict(attrs, config):
     if (not re.fullmatch(func + r'[0-9]+', mds) or
             not re.fullmatch(r'LS-[A-Z0-9-]+' if func == 'ST' else r'PG-[A-Z0-9-]+', catalogue)):
         return None
-    raw_type = text(attrs.get('SOURCE_NODETYPE')) if 'SOURCE_NODETYPE' in attrs else text(attrs.get('NODETYPE'))
+    raw_type = text(json_node_type_attrs(attrs,config).get('NODETYPE')) if restraint_precedence(config) else (text(attrs.get('SOURCE_NODETYPE')) if 'SOURCE_NODETYPE' in attrs else text(attrs.get('NODETYPE')))
     source_kind = {'+Y':'REST','GUI':'GUIDE','LIM':'LINESTOP'}.get(node_type_mutation({**attrs,'NODETYPE':raw_type},config), '')
     physical_kind = 'LINESTOP' if func == 'ST' else 'GUIDE'
     if not source_kind or physical_kind == source_kind:
@@ -188,7 +188,7 @@ def kinds(entries, require, config=None):
         preferred = '' if approval else preferred_kind(a, config, conflict)
         if conflict:
             require(bool(approval or preferred), 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
-        elif not preferred and mapped_code_precedence_applies(a,config) and text(a.get('SOURCE_NODETYPE')):
+        elif not preferred and not restraint_precedence(config) and mapped_code_precedence_applies(a,config) and text(a.get('SOURCE_NODETYPE')):
             codes=a.get('NODETYPE_CODES')
             original=text(a.get('SOURCE_NODETYPE'))
             require(text(a.get('NODETYPE'))==original and isinstance(codes,list) and
@@ -387,7 +387,7 @@ def profile_for(kind, config):
                  'LINESTOP': ('LIM', 'pipe-axis')}[kind]
     p = dict(xmlTypes=(config.get('supportKindToXmlType') or {}).get(kind) or [typ],
              directionMode=mode, direction={'x': 0, 'y': 1, 'z': 0} if kind == 'REST' else None,
-             stiffness='default', gap=text(config.get('defaultGap', '0')),
+             stiffness='default', gap='0' if restraint_precedence(config) else text(config.get('defaultGap', '0')),
              frictionMode='default' if kind == 'REST' else 'sentinel', fixedFriction='')
     mapping = config.get('supportMapping') or {}
     if float(mapping.get('version') or 0) >= 2:
