@@ -81,9 +81,9 @@ export function describedKinds(attrs = {}) {
 }
 
 // The Step 7 rows that apply to staged JSON, enabled, in priority order.
-export function tableRules(config = {}) {
+export function tableRules(config = {}, sources = STAGED_SOURCES) {
   return (migrateSupportMappingConfig(config || {}).rules || [])
-    .filter((rule) => rule && rule.enabled !== false && STAGED_SOURCES.includes(text(rule.source).toUpperCase()))
+    .filter((rule) => rule && rule.enabled !== false && sources.includes(text(rule.source).toUpperCase()))
     .map((rule) => ({ id: text(rule.id), priority: Number(rule.priority ?? 0), field: text(rule.field || '*') || '*',
       match: rule.match, pattern: text(rule.pattern), kind: text(rule.kind).toUpperCase() }))
     .sort((a, b) => a.priority - b.priority);
@@ -171,6 +171,16 @@ export function tableSupportKind(attrs = {}, config = {}, onlyUserRows = false, 
       match: 'engineering-keywords', pattern: Object.values(evidence).join(' ') } });
   return kind||matchTableRules(attrs,Object.fromEntries(Object.entries(f)
     .filter(([key])=>GENERATED_FIELDS.includes(key))),rules,observe);
+}
+
+// ATT/RVM export uses the same Step 7 rule matcher, but no NODETYPE
+// precedence or generated-label/keyword fallback may bypass disabled rows.
+export function matchAttRvmSupportTable(attrs = {}, config = {}, source = 'ATT', observe = null) {
+  const sources = [...STAGED_SOURCES, text(source).toUpperCase(), 'ATT/RVM', 'ATT-RVM'];
+  const f = fields(attrs);
+  const evidence = Object.fromEntries(Object.entries(f).filter(([key])=>!GENERATED_FIELDS.includes(key)));
+  if (!DESCRIPTION_KEYS.some(key=>evidence[key]) && evidence.MDSDTXR) evidence.DESCRIPTION = evidence.MDSDTXR;
+  return matchTableRules(attrs,evidence,tableRules(config,sources),observe);
 }
 
 // Project original scalar attributes for Preview independently of display fields.
