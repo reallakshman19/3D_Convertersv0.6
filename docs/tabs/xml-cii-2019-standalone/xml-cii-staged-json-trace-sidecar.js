@@ -60,7 +60,7 @@ function configFor(config = {}) {
 }
 
 export function buildStagedJsonTraceSidecar(stagedJsonText, config = {}) {
-  const source=typeof stagedJsonText==='string' ? JSON.parse(stagedJsonText) : stagedJsonText;
+  const source=typeof stagedJsonText==='string' ? JSON.parse(stagedJsonText.replace(/^\uFEFF/,'')) : stagedJsonText;
   if (!source || typeof source!=='object') throw new Error('Staged JSON must be an object or array');
   const policy=configFor(config);
   const rows=[];
