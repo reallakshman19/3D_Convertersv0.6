@@ -154,11 +154,70 @@ test('actual independent O1 Worker recomputes the review against its own config,
      await globalThis.onmessage({data:{schema:'LFJ.O1.DomainWorker.v1',kind:'CANCEL'}});
      return ready;
    };
-   const off=await run(cfg,'off'),on=await run(all,'on');
+   const off=await run(cfg,'off'),on=await run({...all,xml229SourceFieldPrecedence:{mappedCodes:true,gap:true}},'on');
    assert.equal(off.restraintReview.status,'FOR_REVIEW');
    assert.equal(on.restraintReview.status,'CLEAR');
    assert.equal(on.restraintReview.policySummary.typeDecisionOccurrences,2);
+   assert.equal(on.restraintReview.policySummary.mappedCodeDecisionOccurrences,2);
    assert.equal(on.restraintReview.sourceBasis.jsonSha256,sha);
    assert.equal(on.engineeringReady,false);
  }finally{Object.assign(globalThis,old);}
+});
+
+test('JSON Trace mapped-code checkbox alone resolves verified type conflicts and records its distinct authority',async()=>{
+ const source=regenerated(),config={...all,xml229SourceFieldPrecedence:{mappedCodes:true}};
+ const result=await stage(source,config,'preview');
+ assert.equal(result.restraintReview.status,'CLEAR');
+ assert.equal(result.restraintReview.policySummary.flags.type,false);
+ assert.equal(result.restraintReview.policySummary.flags.mappedCodes,true);
+ assert.equal(result.restraintReview.policySummary.mappedCodeDecisionOccurrences,2);
+ assert.deepEqual(numericRows(rows(result.document)),numericRows(native(source,config)));
+ const guide=result.proof.restraintAudit.records.find(x=>x.after?.Type==='GUI');
+ assert.deepEqual(guide.decision.rule.mappedCodes,['8']);
+ assert.equal(guide.decision.rule.policy,'xml229SourceFieldPrecedence.mappedCodes');
+ assert.equal(guide.source.member.fields.SOURCE_NODETYPE,'14');
+ const gapless=regenerated();gapless[0].children[2].attributes.CMPSUPGAP='';
+ const held=await stage(gapless,config,'preview');
+ assert.deepEqual(held.restraintReview.policySummary.warningReasons,{STEP7_GAP_POLICY_OR_SAVED_GAP_REQUIRED:1});
+ const both={...config,xml229SourceFieldPrecedence:{mappedCodes:true,gap:true}};
+ const cleared=await stage(gapless,both,'preview');
+ assert.equal(cleared.restraintReview.status,'CLEAR');
+ assert.deepEqual(numericRows(rows(cleared.document)),numericRows(native(gapless,both)));
+ for(const invalid of [undefined,[],['9'],['8','9'],['99']]){
+   const stale=regenerated();
+   if(invalid===undefined)delete stale[0].children[2].attributes.NODETYPE_CODES;
+   else stale[0].children[2].attributes.NODETYPE_CODES=invalid;
+   const review=await stage(stale,both,'preview');
+   assert.equal(review.restraintReview.status,'FOR_REVIEW');
+   await assert.rejects(stage(stale,both),{code:'PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT'});
+   assert.throws(()=>native(stale,both),/NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT/);
+ }
+ await assert.rejects(stage(source,{...config,xml229PhysicalVertexPrefinal:true}),{code:'PREFINAL_RESTRAINT_CONFIG_INVALID'});
+});
+test('real JSON Trace checkbox writes the shared support config and persists its authority',async()=>{
+ const {createRequire}=await import('node:module');
+ const require=createRequire(import.meta.url);
+ const {installMiniDom,MiniElement}=require('./helpers/mini-dom.js');
+ const {renderMappedCodePrecedence}=await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-resolver-json-trace.js');
+ const {createXmlCiiAdaptedWorkflowState}=await import('../tabs/xml-cii-2019-standalone/ui-adapted/xml-cii-adapted-state.js');
+ const oldDoc=globalThis.document,oldStorage=globalThis.localStorage;
+ try{
+   installMiniDom();
+   const store=new Map();
+   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v),removeItem:k=>store.delete(k)}});
+   const ref={current:createXmlCiiAdaptedWorkflowState()};
+   let renders=0;const panel=new MiniElement('section');
+   renderMappedCodePrecedence(panel,ref,()=>renders++);
+   const checkbox=panel.querySelector('[data-field="xml229-source-field-precedence-mapped-codes"]');
+   assert.ok(checkbox);assert.equal(checkbox.checked,false);
+   checkbox.checked=true;checkbox.dispatch('change');
+   assert.equal(JSON.parse(ref.current.supportConfigJson).xml229SourceFieldPrecedence.mappedCodes,true);
+   assert.equal(JSON.parse(store.get('xml-cii-import-masters-v1')).config.xml229SourceFieldPrecedence.mappedCodes,true);
+   assert.equal(renders,1);
+   checkbox.checked=false;checkbox.dispatch('change');
+   assert.equal(JSON.parse(ref.current.supportConfigJson).xml229SourceFieldPrecedence.mappedCodes,false);
+ }finally{
+   globalThis.document=oldDoc;
+   Object.defineProperty(globalThis,'localStorage',{configurable:true,value:oldStorage});
+ }
 });
