@@ -217,11 +217,18 @@ function renderBenchmark(parent, state) {
     parent.appendChild(section);
     return;
   }
+  const exact=bench.schema==='XML229.StagedJsonSidecarRoundTrip.v1';
   const pct = Number(bench.percent || 0).toFixed(2);
-  const message = `${bench.matched}/${bench.compared} matched (${pct}%). Mismatches: ${bench.mismatched}.`;
+  const message = `${exact?'Exact source-member round trip':'XML text benchmark'}: ${bench.matched}/${bench.compared} matched (${pct}%). Mismatches: ${bench.mismatched}.`;
   const badge = createElement('div', message, 'xml-cii-phase-help');
   if (badge.style) badge.style.color = bench.mismatched ? '#f87171' : '#8be28b';
   section.appendChild(badge);
+  if(exact){
+    section.appendChild(createElement('div','Original members: '+bench.expected+'; imported rows: '+bench.imported+
+      '; missing: '+bench.missing+'; extra: '+bench.extra+'; duplicate: '+bench.duplicates+'; field changes: '+bench.changed+'.','xml-cii-phase-help'));
+    if(bench.xmlAssignments)section.appendChild(createElement('div','Separate XML member-assignment check: '+bench.xmlAssignments.matched+'/'+bench.xmlAssignments.compared+
+      ' identical; '+bench.xmlAssignments.mismatched+' differing. This does not approve engineering restraints.','xml-cii-phase-help'));
+  }
 
   const mismatches = rows(bench.rows).filter((row) => !row.matched).slice(0, 20);
   if (mismatches.length) {
