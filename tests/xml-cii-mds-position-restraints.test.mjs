@@ -240,3 +240,18 @@ test('BM3 receipt cannot authorize drifted staged gap or MDS source identity',()
   assert.throws(()=>closeGovernedMdsPositionRestraintsXml(BM3_XML,JSON.stringify(altered),config,
     {requireUnambiguous:true}),error=>error.code==='PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT');
 });
+
+test('gapless ST501 remains independently conflicted, and cannot be approved as a guessed zero gap',()=>{
+  const members=JSON.parse(BM3_JSON);
+  members[0].children[2].attributes.CMPSUPGAP='';
+  const input=JSON.stringify(members);
+  const review=closeGovernedMdsPositionRestraintsXml(BM3_XML,input,BM3_CONFIG,
+    {requireUnambiguous:true,conflictPolicy:'quarantine'});
+  assert.equal(review.warnings.some(w=>w.member?.fields?.NAME==='/SL-1840203.1.2' &&
+    w.candidateKind==='LINESTOP'),true);
+  const config={...BM3_CONFIG,xml229RestraintKindOverrides:[
+    reviewFor(members[0].children[2],'LINESTOP','synthetic-gapless-proposal'),
+    reviewFor(BM3_MEMBERS[3],'GUIDE','synthetic-fixture:GT500-10')]};
+  assert.throws(()=>closeGovernedMdsPositionRestraintsXml(BM3_XML,input,config,
+    {requireUnambiguous:true}),error=>error.code==='PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT');
+});
