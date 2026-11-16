@@ -289,7 +289,6 @@ function isRestHardwareMember(attrs,kind) {
 function evidenceByKind(record, config = {}, requireUnambiguous = false, selected=new Map(),
                         evaluations=[],warnings=[],quarantine=false) {
   const result=new Map(),blockedKinds=new Set();
-  const memberTypes=new Map();
   for(const member of Array.isArray(record?.positionMembers)?record.positionMembers:[]){
     const attrs=memberAttributes(member);
     const name=text(attrs.NAME).toUpperCase(),rawType=text(attrs.NODETYPE);
