@@ -356,18 +356,13 @@ test('default O1 Save persists effective resolver config independently of source
    assert.equal(createXmlCiiAdaptedWorkflowState().resolverJsonTraceConfig.matchMode,'ROOT');
  }finally{globalThis.document=oldDoc;Object.defineProperty(globalThis,'localStorage',{configurable:true,value:oldStorage});}
 });
-test('explicit named disjoint branch exports fail fast without refusing partial or linked sources',async()=>{
- const {inspectXml229StagedScope,assertXml229StagedScope}=await import('../tabs/xml-cii-2019-standalone/integration/xml229-staged-scope-preflight.mjs');
- const disjoint=[{type:'BRANCH',name:'/OTHER/LINE/B4',children:[{type:'SUPPORT',attributes:{NAME:'/PS-999',REF:'=100/999'}}]}];
- const xml='<PipeStressExport><Pipe><Branch><Branchname>/ORIGINAL/LINE/B1</Branchname><Node><NodeNumber>10</NodeNumber><NodeName>PS-111/DATUM</NodeName><ComponentRefNo>=100/111</ComponentRefNo><Position>0 0 0</Position></Node></Branch></Pipe></PipeStressExport>';
- assert.equal(inspectXml229StagedScope(xml,JSON.stringify(disjoint)).status,'DISJOINT');
- assert.throws(()=>assertXml229StagedScope(xml,JSON.stringify(disjoint)),e=>e.code==='ENGINEERING_PREVIEW_STAGED_SCOPE_MISMATCH'&&e.retryable===false);
- assert.equal(inspectXml229StagedScope(xml,'').status,'XML_ONLY');
- assert.equal(inspectXml229StagedScope(xml,JSON.stringify([{type:'SUPPORT',attributes:{NAME:'PS-999'}}])).status,'UNKNOWN');
- const partial=structuredClone(disjoint);partial.push({type:'BRANCH',name:'/ORIGINAL/LINE/B2',children:[]});
- assert.equal(inspectXml229StagedScope(xml,JSON.stringify(partial)).status,'OVERLAP');
- const linked=structuredClone(disjoint);linked[0].children[0].attributes.COMPRE='=100/111';
- assert.equal(inspectXml229StagedScope(xml,JSON.stringify(linked)).status,'POSSIBLE_OVERLAP');
- const named=structuredClone(disjoint);named[0].children[0].attributes.NAME='PS-111.1';
- assert.equal(inspectXml229StagedScope(xml,JSON.stringify(named)).status,'POSSIBLE_OVERLAP');
+test('unrelated staged branches do not contribute restraints or block source-only Preview staging',async()=>{
+ const source=input();
+ source[0].name='/UNRELATED/LINE/B1';
+ const result=await stage(source,cfg,'preview');
+ assert.equal(result.restraintReview.warnings.length,0);
+ assert.equal(rows(result.document).length,0);
+ const xml=XML.replace('</Node>','<Restraint><Type>+Y</Type><Gap>0</Gap><Stiffness>123456</Stiffness><Friction>0.3</Friction></Restraint></Node>');
+ const original=await prepareXml229PrefinalRestraints({xmlText:xml,stagedJsonText:JSON.stringify(source),config:cfg,policy:'preview'});
+ assert.deepEqual(numericRows(rows(original.document)),[['+Y',0,123456,.3]]);
 });
