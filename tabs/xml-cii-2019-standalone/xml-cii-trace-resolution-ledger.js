@@ -1,7 +1,5 @@
-import {
-  canonicalPsOnly, literalSupportRoot, normalizeResolverMatchMode,
-  DEFAULT_PS_STRIP_SUFFIXES,
-} from './xml-cii-resolver-match-policy.js';
+import { canonicalPsOnly, literalSupportRoot, normalizeResolverMatchMode,
+  DEFAULT_PS_STRIP_SUFFIXES } from './xml-cii-resolver-match-policy.js';
 import { sourceFieldEvidence } from '../../converters/xml-cii2019-core/source-schema-adapter.js';
 import { groupTraceEntriesSpatially } from './xml-cii-trace-spatial-index.js';
 
@@ -598,85 +596,39 @@ function applyGroupOffset(groups, offset) {
 }
 
 
-// Identity-only modes do not use the positional index or PS matching regex in
-// ROOT mode. Keep members separate and retain their original source paths.
+// Explicit identity modes do not use the position index, and ROOT has no
+// PS-regex, suffix, or coordinate-based grouping.
 function resolverMatchMode(config = {}) {
   const value = config?.resolverJsonTrace?.matchMode ?? config?.jsonTrace?.matchMode
     ?? config?.matchMode;
   return value == null ? 'LEGACY' : normalizeResolverMatchMode(value);
 }
-
 function resolverSuffixes(config = {}) {
   return config?.resolverJsonTrace?.psFallback?.stripSuffixes
     ?? config?.jsonTrace?.psFallback?.stripSuffixes
     ?? config?.psFallback?.stripSuffixes ?? DEFAULT_PS_STRIP_SUFFIXES;
 }
-
 function identityForMember(entry, mode, config) {
   const attrs = safeObject(entry?.raw?.attributes);
   if (mode === 'ROOT') {
-    // The explicit support reference is the authoritative physical root.
-    const source = attrValue(attrs, ['CMPSUPREFN', 'SUPPORT_GROUP_REF', 'SUPPORTROOT',
-      'SUPPORT_GROUP', 'PSROOT']) || entry?.name || entry?.raw?.name || '';
-    return literalSupportRoot(source);
+    return literalSupportRoot(attrValue(attrs, ['CMPSUPREFN', 'SUPPORT_GROUP_REF',
+      'SUPPORTROOT', 'SUPPORT_GROUP', 'PSROOT']) || entry?.name || entry?.raw?.name || '');
   }
   const candidates = [entry?.name, entry?.dtxrPs, attrValue(attrs, ['PS', 'SupportTag']),
     attrValue(attrs, ['CMPSUPREFN'])];
-  for (const candidate of candidates) {
-    const id = canonicalPsOnly(candidate, resolverSuffixes(config));
-    if (id) return id;
+  for (const value of candidates) {
+    const key = canonicalPsOnly(value, resolverSuffixes(config));
+    if (key) return key;
   }
   return '';
 }
-
 function buildStandaloneDtxrIdentityGroups(stagedJsonText, mode, config) {
   let parsed;
   try { parsed = typeof stagedJsonText === 'string' ? JSON.parse(stagedJsonText) : stagedJsonText; }
   catch { return []; }
   const entries = [];
   walkStaged(parsed, { branchName: '', point: null, bore: '' },
-    entries, '
-  const toleranceMm = toleranceFromConfig(config);
-  const mode = resolverMatchMode(config);
-  const nodes = parseStandaloneDtxrXmlNodes(sourceText);
-  let groups = mode === 'PS' || mode === 'ROOT'
-    ? buildStandaloneDtxrIdentityGroups(stagedJsonText, mode, config)
-    : buildStandaloneDtxrPositionGroups(stagedJsonText, toleranceMm, config);
-  let records = nodes.map((node) => mode === 'PS' || mode === 'ROOT'
-    ? recordForIdentityNode(node, groups, toleranceMm, mode, config)
-    : recordForNode(node, groups, toleranceMm, mode));
-  let calibration = null;
-  if ((mode === 'POS' || mode === 'LEGACY') && !records.some((record) => record.effectiveSource === 'DTXR_POS')) {
-    calibration = inferPositionOffset(nodes, groups, config);
-    if (calibration) {
-      groups = applyGroupOffset(groups, calibration);
-      records = nodes.map((node) => recordForNode(node, groups, toleranceMm, mode));
-    }
-  }
-  const diagnostics = [
-    { type: 'trace-resolution-ledger', schema: LEDGER_SCHEMA, rows: records.length, matchMode: mode },
-    { type: 'trace-resolution-position-groups', groups: groups.length, toleranceMm },
-    { type: 'trace-resolution-status-counts', counts: records.reduce((out, record) => { out[record.status] = (out[record.status] || 0) + 1; return out; }, {}) },
-  ];
-  if (calibration) diagnostics.push({ type: 'trace-resolution-auto-position-offset', ...calibration });
-  for (const record of records) {
-    if (record.status !== 'UNRESOLVED' || record.xmlNodeName || record.xmlPoint) diagnostics.push({ type: 'standalone-dtxr-node-resolution', ...record });
-  }
-  return {
-    schema: LEDGER_SCHEMA,
-    sourceKind: 'staged-json',
-    toleranceMm,
-    nodes,
-    groups,
-    records,
-    ledger: records,
-    calibration,
-    diagnostics,
-  };
-}
-
-export { LEDGER_SCHEMA as TRACE_RESOLUTION_LEDGER_SCHEMA };
-, { value: 0 }, config, false);
+    entries, '$', { value: 0 }, config, false);
   const groups = [], byKey = new Map();
   for (const entry of entries) {
     const identity = identityForMember(entry, mode, config);
@@ -696,7 +648,6 @@ export { LEDGER_SCHEMA as TRACE_RESOLUTION_LEDGER_SCHEMA };
     maxInternalDistanceMm: null,
   }));
 }
-
 function recordForIdentityNode(node, groups, toleranceMm, mode, config) {
   const identity = mode === 'ROOT'
     ? literalSupportRoot(node.xmlNodeName || node.psKey || node.componentRefNo)
@@ -749,19 +700,24 @@ function recordForIdentityNode(node, groups, toleranceMm, mode, config) {
 
 export function buildStandaloneDtxrResolutionLedger(sourceText, stagedJsonText, config = {}) {
   const toleranceMm = toleranceFromConfig(config);
+  const mode = resolverMatchMode(config);
   const nodes = parseStandaloneDtxrXmlNodes(sourceText);
-  let groups = buildStandaloneDtxrPositionGroups(stagedJsonText, toleranceMm, config);
-  let records = nodes.map((node) => recordForNode(node, groups, toleranceMm));
+  let groups = mode === 'PS' || mode === 'ROOT'
+    ? buildStandaloneDtxrIdentityGroups(stagedJsonText, mode, config)
+    : buildStandaloneDtxrPositionGroups(stagedJsonText, toleranceMm, config);
+  let records = nodes.map((node) => mode === 'PS' || mode === 'ROOT'
+    ? recordForIdentityNode(node, groups, toleranceMm, mode, config)
+    : recordForNode(node, groups, toleranceMm, mode));
   let calibration = null;
-  if (!records.some((record) => record.effectiveSource === 'DTXR_POS')) {
+  if ((mode === 'POS' || mode === 'LEGACY') && !records.some((record) => record.effectiveSource === 'DTXR_POS')) {
     calibration = inferPositionOffset(nodes, groups, config);
     if (calibration) {
       groups = applyGroupOffset(groups, calibration);
-      records = nodes.map((node) => recordForNode(node, groups, toleranceMm));
+      records = nodes.map((node) => recordForNode(node, groups, toleranceMm, mode));
     }
   }
   const diagnostics = [
-    { type: 'trace-resolution-ledger', schema: LEDGER_SCHEMA, rows: records.length },
+    { type: 'trace-resolution-ledger', schema: LEDGER_SCHEMA, rows: records.length, matchMode: mode },
     { type: 'trace-resolution-position-groups', groups: groups.length, toleranceMm },
     { type: 'trace-resolution-status-counts', counts: records.reduce((out, record) => { out[record.status] = (out[record.status] || 0) + 1; return out; }, {}) },
   ];
