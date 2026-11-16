@@ -8,6 +8,9 @@
  * The application owns active job/selection cancellation.
  */
 import {runStandaloneResolverJsonTrace} from '../xml-cii-resolver-json-trace.js';
+import {installWeightBasisXmlDom} from './weight-basis-xml-dom.js';
+import {prepareXml229PrefinalRestraints} from '../integration/xml229-prefinal-restraints.mjs';
+installWeightBasisXmlDom(globalThis);
 import {
   buildXmlNodeWiseTraceRows,buildEvidenceTreeRows,
   buildXmlNodeWiseTraceCsv,buildEvidenceTreeCsv
@@ -43,6 +46,21 @@ async function run(m){
    supportConfigJson:m.supportConfigJson||'{}',jsonConfig:m.jsonConfig||{},
    jsonTraceScopeId:m.jsonTraceScopeId||''
  });
+ // Independently assess original source conflicts; never borrow the last
+ // Preview failure from another input/session. Trace/export remains source-only.
+ let restraintReview={status:'NOT_ASSESSED',warnings:[]};
+ try {
+   const config=JSON.parse(m.supportConfigJson||'{}');
+   const resolver=m.jsonConfig||{};
+   const effective={...config,resolverJsonTrace:{...(config.resolverJsonTrace||{}),...resolver},
+     dtxrPositionOffset:resolver.dtxrPositionOffset||config.dtxrPositionOffset};
+   const stage=await prepareXml229PrefinalRestraints({xmlText:m.sourceText,
+     stagedJsonText:json,config:effective,purpose:'preview'});
+   restraintReview=stage.restraintReview;
+ } catch(error) {
+   restraintReview={status:'REVIEW_BLOCKED',warnings:[],
+     code:error?.code||'PREFINAL_RESTRAINT_REVIEW_FAILED',error:String(error?.message||error)};
+ }
  // Keep complete existing semantic data in Worker; expose only bounded pages.
  active.result=result;
  active.rows={
@@ -52,7 +70,8 @@ async function run(m){
  active.paths=[...new Set([
    ...(result.resolutionLedger||[]).filter(r=>String(r.status).startsWith('RESOLVED_'))
      .flatMap(r=>r.sourcePaths||[]),
-   ...active.rows.evidence.map(row=>row.sourcePath)
+   ...active.rows.evidence.map(row=>row.sourcePath),
+   ...restraintReview.warnings.flatMap(row=>row.sourcePaths||[])
  ].filter(Boolean))];
  send('READY',id,{
    sourceRefId:active.ref,sourceSha256:active.sha,sourceRevision:active.revision,
@@ -61,6 +80,7 @@ async function run(m){
      matched:result.matchedFacts?.length||0,rejected:result.rejectedFacts?.length||0,
      paths:active.paths.length},
    // Source-attested source-only index does not bless domain values for output.
+   restraintReview,
    rightsBasis:'SOURCE_MATCH_PENDING_ORACLE',engineeringReady:false
  });
 }
