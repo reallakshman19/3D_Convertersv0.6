@@ -125,6 +125,8 @@ def ps_suffixes(config):
 
 
 def ps_canonical(value, suffixes):
+    # Validate direct callers as well as configuration-loaded suffix lists.
+    suffixes = ps_suffixes({'resolverJsonTrace': {'psFallback': {'stripSuffixes': suffixes}}})
     match = re.search(r'(?:^|[^A-Z0-9])/?(PS-?\d+(?:[._-]\d+)*)(?=$|[^A-Z0-9._-])',
                       text(value).upper())
     if not match:
