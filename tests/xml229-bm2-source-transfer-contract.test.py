@@ -449,9 +449,11 @@ class SourceTransferRegression(unittest.TestCase):
                             "17")
             self.assertEqual(from_tab7, [("+Y", "6.0")])
             self.assertIn((14, 6.0), cii_after_tab7)
-            self.assertNotEqual(cii_before_tab7, cii_after_tab7)
-            self.assertNotEqual(before_tab7, from_tab7,
-                                "same source XML + staged JSON must change when REST alias is saved")
+            # NODETYPE=17 is authoritatively mutated to REST=14 already.
+            # A second consistent REST keyword must NOT rewrite CII output,
+            # fabricate a new restraint, or override source-owned classification.
+            self.assertEqual(cii_before_tab7, cii_after_tab7)
+            self.assertEqual(before_tab7, from_tab7)
             print("XML229_CONFIG_MUTATION_TAB7 " + json.dumps({
                 "branch": branch, "node": 3430, "sourceText": "CRADLE RETAINER STYLE-314",
                 "before": before_tab7, "after": from_tab7,
