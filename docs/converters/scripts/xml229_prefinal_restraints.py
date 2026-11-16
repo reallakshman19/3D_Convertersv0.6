@@ -149,8 +149,18 @@ def kinds(entries, require, config=None):
             # must fail closed too; source type has precedence over a keyword.
             configured_mapper_semantic_conflict(a, e['desc'], config,
                                                 node_type_kind, require)
+        # Parse authored Step 7 rules even if a source NODETYPE or built-in
+        # table row already resolved the kind. Equal-priority opposing user
+        # rules and malformed regexes must not disappear behind that shortcut.
+        custom_kind = configured_support_rule(a, e['desc'], config, require)
+        if node_type_kind and custom_kind:
+            require(custom_kind == node_type_kind,
+                    'NATIVE_PREFINAL_RESTRAINT_KIND_AMBIGUOUS')
         table_kind = '' if node_type_kind else owner_rule_kind(a, config)[0]
         if table_kind:
+            if custom_kind:
+                require(custom_kind == table_kind,
+                        'NATIVE_PREFINAL_RESTRAINT_KIND_AMBIGUOUS')
             # A Step 7 table answer must still agree with edited Tab 7 keywords.
             configured_mapper_semantic_conflict(a, e['desc'], config, table_kind, require)
         if node_type_kind or table_kind:
