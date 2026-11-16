@@ -58,7 +58,7 @@ function renderConfidencePolicy(parent) {
   section.appendChild(createElement('h3', 'Confidence / precedence policy'));
   section.appendChild(createElement(
     'p',
-    'For source members, a valid NODETYPE after the 8 Config mutation takes precedence; otherwise the saved Step 7 table decides. The preview names the matched rule, priority and source field. Generated labels are fallback evidence. Test evaluates the proposed configuration; Save to Config makes that configuration available to Preview, Final and Run. Equal-priority conflicting rules remain review-required.',
+    'By default a valid NODETYPE after the 8 Config mutation takes precedence. The optional source-field precedence below uses the saved Step 7 rules against original staged fields instead when they disagree. The preview names the matched rule, priority and source field. Generated labels are fallback evidence. Test evaluates the proposed configuration; Save to Config makes that configuration available to Preview, Final and Run. Equal-priority conflicting rules remain review-required.',
     'xml-cii-phase-help'
   ));
   parent.appendChild(section);
@@ -152,9 +152,31 @@ function renderRestraintTypeCodeTable(card, stateRef, render) {
     if (typeof render === 'function') render();
   };
 
+  const policy=Object.assign({},config.xml229SourceFieldPrecedence||{});
+  const policySection=createElement('section','','xml-cii-audit-panel');
+  policySection.appendChild(createElement('h3','Staged JSON conflict precedence'));
+  const choices=[
+    ['type','In case of conflict, staged JSON field data (SKEY, DESCRIPTION, DESC, CMPSUPTYPE, DTXR, MDSSUPPTYPE) wins over NODETYPE.'],
+    ['gap','In case of conflict, staged CMPSUPGAP / CMPSUPGAP_POS / CMPSUPGAP_PS or saved Step 7 Gap wins over NODEGAP.'],
+    ['stiffness','In case of conflict, staged STIFFNESS / NODESTIFFNESS / CMPSUPSTIFF or Step 7 Stiffness wins over NODESTIFF.'],
+    ['friction','In case of conflict, staged FRICTION / CMPSUPFRICTION or Step 7 Friction / Fixed Fric. wins over NODEFRICTION.']
+  ];
+  for(const [key,label] of choices){
+    const input=appendLabeledControl(policySection,label,createElement('input'));
+    input.type='checkbox';input.checked=policy[key]===true;
+    input.dataset.field='xml229-source-field-precedence-'+key;
+    input.disabled=config.xml229PhysicalVertexPrefinal===true;
+    input.addEventListener('change',()=>{
+      onSaveConfig({...config,xml229SourceFieldPrecedence:{...policy,[key]:input.checked}});
+    });
+  }
+  policySection.appendChild(createElement('p','Off preserves the existing behavior. On is an explicit project-wide authority choice for matched staged members, not a change to the original JSON. Type uses enabled Step 7 rows by priority; generated labels cannot override NODETYPE. Gapless ST/GT type conflicts need the Gap option and a saved profile Gap. Equal-priority rules, incompatible source fields and invalid settings still require correction. Original XML-authored restraints remain protected. Rebuild Preview / O1 / Final after changes. This option is currently qualified only for the standard V1 closure.','xml-cii-phase-help'));
+  card.appendChild(policySection);
+
   const conservation=appendLabeledControl(card,'Preserve separate restraints at connected source vertices (qualified inputs only):',createElement('input'));
   conservation.type='checkbox';conservation.checked=config.xml229PhysicalVertexPrefinal===true;
   conservation.dataset.field='physical-vertex-restraints';
+  conservation.disabled=Object.values(policy).some(v=>v===true);
   conservation.addEventListener('change',()=>onSaveConfig({...config,xml229PhysicalVertexPrefinal:conservation.checked}));
   card.appendChild(createElement('p','This opt-in requires exact source coordinate matches, one JSON member per restraint, and independent source replay. Auxiliary hardware roles, compound text and unsupported type profiles need review. Unbound or ambiguous evidence blocks conversion. Rebuild Preview/Final after changing it.','xml-cii-phase-help'));
 

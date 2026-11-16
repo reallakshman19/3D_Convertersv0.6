@@ -1,9 +1,9 @@
 import {
   applyXmlRestraints,
-  restraintEntriesFromSupportKind,
+  restraintEntriesFromSupportKind,sourceSupportGap,preferredStagedScalar,
 } from '../../converters/xml-cii2019-core/support-mapping.js';
 import { migrateSupportMappingConfig } from '../../converters/xml-cii2019-core/support-mapping-config.js';
-import { governedSupportKind, SUPPORT_KIND_EVIDENCE_FIELDS } from '../../converters/xml-cii2019-core/support-kind-precedence.js';
+import { governedSupportKind, stagedFieldKindDecision, SUPPORT_KIND_EVIDENCE_FIELDS } from '../../converters/xml-cii2019-core/support-kind-precedence.js';
 import {mutateRestraintType} from '../../converters/xml-cii2019-core/restraint-type-mutation.js';
 import {identifyXml229MdsKindConflict, approvedXml229MdsKindResolution,
   isQuarantinableXml229RestraintError, xml229RestraintConflictError}
@@ -167,8 +167,18 @@ function supportKindFromMember(member,config={},observe=null) {
   const physicalConflict=identifyXml229MdsKindConflict(attrs,config);
   if (physicalConflict) {
     const resolution=approvedXml229MdsKindResolution(attrs,config,physicalConflict);
-    if (!resolution) throw xml229RestraintConflictError(physicalConflict);
-    return decidedBy(resolution.kind,resolution.source,resolution.rule);
+    if(resolution)return decidedBy(resolution.kind,resolution.source,resolution.rule);
+    const preferred=stagedFieldKindDecision(attrs,config);
+    // Physical MDS corroboration cannot be contradicted by a generic rule.
+    // Gapless reclassification needs a separately selected gap policy and
+    // an explicitly saved profile gap (not an implicit zero).
+    const catalogue=['CMPSUPGAP','CMPSUPGAP_POS','CMPSUPGAP_PS'].some(k=>text(attrs[k]));
+    const saved=config.supportMapping?.kindProfiles?.[physicalConflict.candidateKind]?.gap;
+    if(!preferred||preferred.kind!==physicalConflict.candidateKind||
+       (!catalogue&&!(config.xml229SourceFieldPrecedence?.gap===true&&saved!=null&&text(saved)!=='')))
+      throw xml229RestraintConflictError(physicalConflict);
+    assertTab7Compatible(attrs,member,config,preferred.kind);
+    return decidedBy(preferred.kind,preferred.source,preferred.rule);
   }
   // Owner rule (12 Nov, RCA-04): source NODETYPE wins when present; otherwise
   // the Step 7 support table decides. The chain below is the fallback only.
@@ -176,7 +186,7 @@ function supportKindFromMember(member,config={},observe=null) {
   const decided = governedSupportKind({...safeObject(member?.capturedFields), ...attrs}, config,
     GOVERNED_KINDS,value=>{decision=value;});
   // A Step 7 table answer must still agree with edited Tab 7 keywords.
-  if (decided.source === 'step7-support-table') assertTab7Compatible(attrs, member, config, decided.kind);
+  if (decided.source === 'step7-support-table'||decided.source==='explicit-staged-field-precedence') assertTab7Compatible(attrs, member, config, decided.kind);
   if (decided.kind) return decidedBy(decided.kind,decision?.source||decided.source,decision?.rule);
   // An explicit source description wins over abbreviated MDS code aliases.
   // This mirrors the old confidence mapper, not its legacy axis defaults.
@@ -247,7 +257,11 @@ function sourceGapText(attrs){
     .map(key=>text(attrs?.[key])).find(Boolean)||'';
 }
 
-function supportGapNumber(attrs){
+function supportGapNumber(attrs,config={},kind=''){
+  if(config.xml229SourceFieldPrecedence?.gap===true&&kind){
+    try{return Number(sourceSupportGap(attrs,config,kind).gap);}
+    catch(error){if(error.code)throw error;throw Object.assign(error,{code:String(error.message).includes('AMBIGUOUS')?'PREFINAL_RESTRAINT_GAP_AMBIGUOUS':'PREFINAL_RESTRAINT_GAP_INVALID'});}
+  }
   // A legacy NODEGAP=0 is a placeholder only when an explicit
   // CMPSUPGAP is supplied on the SAME source member. Do not treat
   // two distinct nonzero source claims as equivalent or silently choose one.
@@ -267,6 +281,8 @@ function supportGapNumber(attrs){
 }
 
 function sourceNodeType(attrs,config){
+  const preferred=stagedFieldKindDecision(attrs,config);
+  if(preferred)return preferred.rule.effectiveXmlType;
   const raw=text(attrs?.NODETYPE);
   if(!raw)return '';
   const selected=mutateRestraintType(raw,
@@ -305,7 +321,10 @@ function evidenceByKind(record, config = {}, requireUnambiguous = false, selecte
     if(!kind||blockedKinds.has(kind))continue;
     const original=memberAttributes(member);
     let numeric=null;
-    try { numeric=requireUnambiguous?supportGapNumber(original):null; }
+    try {
+      numeric=requireUnambiguous?supportGapNumber(original,config,kind):null;
+      preferredStagedScalar(original,config,'stiffness');preferredStagedScalar(original,config,'friction');
+    }
     catch(error) {
       if(!quarantine||!isQuarantinableXml229RestraintError(error))throw error;
       warnings.push({code:error.code,kind,member:restraintAuditMember(member,decision,'quarantined-gap'),
@@ -316,7 +335,7 @@ function evidenceByKind(record, config = {}, requireUnambiguous = false, selecte
     const raw=sourceGapText(original);
     // The current XML writer understands CMPSUPGAP; the older source also
     // stored the same gap in NODEGAP. Preserve its value, including zero.
-    const attrs=raw&&!text(original.CMPSUPGAP)&&!text(original.CMPSUPGAP_POS)
+    const attrs=config.xml229SourceFieldPrecedence?.gap!==true&&raw&&!text(original.CMPSUPGAP)&&!text(original.CMPSUPGAP_POS)
       &&!text(original.CMPSUPGAP_PS)?{...original,CMPSUPGAP:raw}:original;
     const choose=reason=>{
       result.set(kind,attrs);
@@ -337,7 +356,7 @@ function evidenceByKind(record, config = {}, requireUnambiguous = false, selecte
       }
     }
     if(requireUnambiguous&&previous&&sourceGapText(previous)&&raw&&
-       supportGapNumber(previous)!==numeric)
+       supportGapNumber(previous,config,kind)!==numeric)
       {
         const error=Object.assign(new Error('Conflicting JSON gaps for the same support kind '+kind+': '+
           sourceGapText(previous)+' vs '+raw+(text(previous.NAME)||text(attrs.NAME)
@@ -363,6 +382,10 @@ function evidenceByKind(record, config = {}, requireUnambiguous = false, selecte
         member:restraintAuditMember(member,decision,'quarantined-same-kind-type'),
         message:'Conflicting staged NODETYPE mutations for the same support kind'});
       blockedKinds.add(kind);result.delete(kind);selected.delete(kind);continue;
+    }
+    if(previous&&requireUnambiguous)for(const field of ['stiffness','friction']){
+      const a=preferredStagedScalar(previous,config,field),b=preferredStagedScalar(attrs,config,field);
+      if(a&&b&&Number(a)!==Number(b))throw Object.assign(Error('Conflicting same-kind '+field+' source members'),{code:'PREFINAL_RESTRAINT_'+field.toUpperCase()+'_AMBIGUOUS'});
     }
     if(!previous||(!sourceGapText(previous)&&raw))choose(previous?'explicit-source-gap':'first-qualified-kind-member');
   }
@@ -490,7 +513,7 @@ export function closeGovernedMdsPositionRestraintsXml(xmlText, stagedJsonText, c
       for (const [kind, attrs] of evidence) {
         const authored = text(attrs.CMPSUPGAP);
         const legacy = text(attrs.NODEGAP);
-        if (authored && legacy && Number(legacy) === 0 && supportGapNumber(attrs) !== 0) {
+        if (authored && legacy && Number(legacy) === 0 && supportGapNumber(attrs,config,kind) !== 0) {
           diagnostics.push({
             type: 'xml229-gap-authority-receipt',
             nodeNumber: childText(node, 'NodeNumber'),
@@ -525,9 +548,7 @@ export function closeGovernedMdsPositionRestraintsXml(xmlText, stagedJsonText, c
         const candidates=restraintEntriesFromSupportKind(kind, attrs, node, config)
           .map(entry=>({
             ...entry,type:selectedType||entry.type,
-            // Source gap is authoritative; absent source gap follows the
-            // Step 7 kind entry (0 until a profile Gap is configured).
-            gap:explicitGap?String(supportGapNumber(attrs)):entry.gap,
+            gap:config.xml229SourceFieldPrecedence?.gap===true?entry.gap:explicitGap?String(supportGapNumber(attrs)):entry.gap,
           }));
         note.selections.push({kind,types:candidates.map(entry=>normalizeXmlType(entry?.type||entry)),
           source:selected.get(kind)||null});

@@ -11,7 +11,6 @@ import {inventoryRestraintAudit,collectRestraintAudit,completeRestraintAudit,bin
 import {materializeXml229PhysicalVertexRestraints} from './xml229-physical-vertex-prefinal-materializer.mjs';
 import {recordXml229AttachmentDelegation} from './xml229-source-attachment-policy.mjs';
 import {migrateSupportMappingConfig} from '../../../converters/xml-cii2019-core/support-mapping-config.js';
-import {isQuarantinableXml229RestraintError} from '../../../converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js';
 
 const local=n=>String(n?.localName||n?.nodeName||'').replace(/^.*:/,'');
 const elements=n=>[...(n?.childNodes||[])].filter(x=>x.nodeType===1);
@@ -45,6 +44,8 @@ function physicalAudit(vertex,before,document,config){
 export async function prepareXml229PrefinalRestraints({
  xmlText,stagedJsonText='',config={},policy='final',
 }){
+  if(config.xml229PhysicalVertexPrefinal===true&&Object.values(config.xml229SourceFieldPrecedence||{}).some(v=>v===true))
+    throw Object.assign(new Error('Source-field precedence is not qualified for physical-vertex V2'),{code:'PREFINAL_RESTRAINT_CONFIG_INVALID'});
   if(!['final','preview'].includes(policy))
     throw Object.assign(new Error('Unknown restraint pre-Final policy'),
       {code:'PREFINAL_RESTRAINT_POLICY_INVALID'});
@@ -89,7 +90,6 @@ export async function prepareXml229PrefinalRestraints({
     originalJsonSha256:await digestUtf8(stagedJsonText),restraintAudit,
     engineeringRestraintAcceptance:restraintReview.engineeringRestraintAcceptance,
     restraintReviewStatus:restraintReview.status,
-    ...(warnings.length?{engineeringRestraintAcceptance:'HOLD'}:{}),
     ...(enabled?{physicalVertexMemberCensus:vertex.proofSummary}:{})}),
     stats:{...resolved?.stats,...fallback.stats,...(enabled?vertex.proofSummary:{})}};
 }
