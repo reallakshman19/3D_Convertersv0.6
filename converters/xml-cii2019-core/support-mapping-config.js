@@ -258,6 +258,18 @@ export function normalizeSupportRuleForConfig(rule, index = 0) {
   };
 }
 
+// Step 7 owns the kind-level fallback gap. A source-authored CMPSUPGAP or
+// NODEGAP is handled separately by the restraint writer and always wins.
+export function normalizeSupportProfileGap(value) {
+  const raw = toText(value);
+  if (!raw) return '0';
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric) || numeric < 0)
+    throw Object.assign(new Error('Step 7 Gap must be a finite non-negative mm value'),
+      { code: 'SUPPORT_MAPPER_GAP_INVALID' });
+  return String(numeric);
+}
+
 export function normalizeSupportKindProfile(profile = {}, fallback = {}) {
   const direction = normalizeDirection(profile.direction ?? fallback.direction);
   return {
@@ -265,7 +277,7 @@ export function normalizeSupportKindProfile(profile = {}, fallback = {}) {
     directionMode: normalizeDirectionMode(profile.directionMode ?? fallback.directionMode),
     direction,
     stiffness: toText(profile.stiffness ?? fallback.stiffness ?? 'default') || 'default',
-    gap: '0',
+    gap: normalizeSupportProfileGap(profile.gap ?? fallback.gap ?? '0'),
     frictionMode: normalizeFrictionMode(profile.frictionMode ?? fallback.frictionMode),
     fixedFriction: toText(profile.fixedFriction ?? fallback.fixedFriction ?? ''),
     supportTagMode: normalizeSupportTagMode(profile.supportTagMode ?? fallback.supportTagMode),
