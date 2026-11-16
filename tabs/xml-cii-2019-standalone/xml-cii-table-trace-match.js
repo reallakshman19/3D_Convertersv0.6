@@ -45,7 +45,7 @@ function rowWithKeys(row) {
     branch: canonicalStandaloneDtxrBranch(row.branchName),
     supportTags: supportTags(row),
     sourceRowNo: text(row._rowIndex),
-    sourcePath: `table[${row._rowIndex}]`,
+    sourcePath: row.sourcePath || `table[${row._rowIndex}]`,
   };
 }
 
