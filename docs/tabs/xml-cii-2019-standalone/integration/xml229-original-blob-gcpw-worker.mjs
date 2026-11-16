@@ -178,7 +178,9 @@ async function start(req){
      originalNodeCount:original.nodeCount,engineeringBranchCount:computed.branchRows.length,
      legacyReviewNodeCount:computed.nodeRows.length},
    originalStagedSourceSha256:r.sha256,originalStagedSourceGeneration:r.generationId,
-   engineeringAcceptance:'NOT_ASSESSED',fullFactPopulationAccepted:false};
+   restraintReview:produced.workerResult.restraintReview,
+   engineeringAcceptance:produced.workerResult.restraintReview?.status==='HOLD'?'HOLD':'NOT_ASSESSED',
+   fullFactPopulationAccepted:false};
  const display=buildXml229VerifiedWeightRowProjection({
    session,sourceId,physicalOccurrences:produced.physicalOccurrences,
    originalOccurrences:original,previewResult:verifiedPreviewResult,config,
@@ -234,9 +236,10 @@ function currentRunAdvisory(){
      stageRevisions:full.revisionBySource,
      counts,engineeringFactsVerified:true,
      previewStatus:'FULL_SOURCE_FACTS_VERIFIED',
+     engineeringRestraintAcceptance:verifiedPreviewResult?.restraintReview?.status||'NOT_ASSESSED',
      weightStatus:counts.unresolved>0?'PROPOSED_OR_UNRESOLVED':'REVIEWED_SOURCE_MASSES',
      ciiReleaseAuthorized:false,
-     releaseReason:'Native CII output has not consumed independent source-bound Final snapshot or authoritative Run gates',
+     releaseReason:verifiedPreviewResult?.restraintReview?.status==='HOLD'?'Unresolved source restraint conflicts require engineering review':'Native CII output has not consumed independent source-bound Final snapshot or authoritative Run gates',
    };
 }
 function currentCandidateCoverage(){
@@ -262,7 +265,10 @@ async function rpc(req){
  const {sourceId,occurrenceId,stage}=req;
  const review=ready.review,basisId=ready.basis.basisId;
  if(req.kind==='read'){
-   if(sourceReceipt.schema==='XML229.XmlOnlyReviewSource.v1'&&req.what==='attest-engine-input')
+   if(['attest-engine-input','native-final-intent','native-final-packet'].includes(req.what)&&
+       verifiedPreviewResult?.restraintReview?.status==='HOLD')
+      fail('PREFINAL_RESTRAINT_REVIEW_HOLD','Resolve source-bound restraint conflicts and rebuild Preview before native Final');
+    if(sourceReceipt.schema==='XML229.XmlOnlyReviewSource.v1'&&req.what==='attest-engine-input')
      fail('NATIVE_XML_ONLY_R2_ATTESTATION_NOT_SUPPORTED');
    if(req.what==='instrument-suggestions'){
      return {schema:'XML229.OptionalInstrumentModelSuggestions.v1',
