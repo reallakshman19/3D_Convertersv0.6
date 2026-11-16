@@ -50,7 +50,7 @@ function csvLine(line, delimiter) {
     }
   }
   cells.push(cell);
-  return cells.map((value) => text(value).replace(/^'(?=[=+\-@])/, ''));
+  return cells.map((value) => text(value).replace(/^'(?='*[=+\-@])/, ''));
 }
 
 function bestDelimiter(lines) {
