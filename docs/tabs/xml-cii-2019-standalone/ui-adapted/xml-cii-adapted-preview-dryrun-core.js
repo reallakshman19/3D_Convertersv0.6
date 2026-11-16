@@ -435,7 +435,7 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText, runtime = {
     }
     const lineListMatch = _normaliseLineListMatch(lineListRawMatch, config);
     const lineFromTo = _xmlCiiRowFromTo(lineListMatch, config);
-    const lineListClass = _rowText(lineListMatch, ['pipingClass', 'Piping Class', 'PIPING_CLASS']);
+    const lineListClass = _toText(lineListMatch?.pipingClass).trim();
     const branchClass = extracted ? extracted.pipingClass : _derivePipingClassFromBranchName(branchName, config);
     // True Format 1/2 ambiguity remains blocked. An exact Line List versus
     // unambiguous Regex class disagreement is an explicit source choice.
@@ -493,8 +493,8 @@ export function xmlCiiDryRunPreview(xmlText, config, stagedJsonText, runtime = {
       xmlThicknesses:insulationNodes.map(n=>_xmlText(n,'InsulationThickness')),
       xmlTypes:insulationNodes.map(n=>_xmlText(n,'InsulationType')),
       override:(config?.overrides?.processData?.[lineKey||branchName]||{}),
-      lineThickness:lineKeyMethod==='exact'?_rowText(lineListMatch,['insThk','Insulation Thickness [mm]','Insulation Thickness','InsThk']):'',
-      lineType:lineKeyMethod==='exact'?_rowText(lineListMatch,['insType','Insulation Type','InsType']):'',
+      lineThickness:lineKeyMethod==='exact'?lineListMatch?.insThk:'',
+      lineType:lineKeyMethod==='exact'?lineListMatch?.insType:'',
       defaultThickness:_processDefaultValue(config,'insThk'),defaultType:_processDefaultValue(config,'insType'),
     });
     const dtxrWall = resolveXmlCiiWallThicknessFromDtxr({ boreMm, dtxrValues: _branchDtxrValues(branch, stagedIndex, config), config });

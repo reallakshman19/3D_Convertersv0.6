@@ -476,9 +476,12 @@ export function resolveBranchProcessData({
     : selectXmlCiiRequestedPipingClass({ branchName, lineListPipingClass, config });
   const requestedPipingClass = classSource.requestedPipingClass;
   // Never replace a selected exact source class with an approximate master class.
-  const classResolverConfig = pipingClassSelection?.pinned
-    ? {...config,pipingClassMatch:{...(config.pipingClassMatch||{}),minAcceptScore:1000,classExactScore:1000}}
-    : config;
+  const classResolverConfig = config;
+  const selectedKey=normalizePipingClass(requestedPipingClass);
+  const selectedRows=(pipingClassIndex?.byClass||pipingClassIndex)?.get?.(selectedKey)||[];
+  const selectedIndex=pipingClassSelection?.pinned
+    ? new Map(selectedRows.length?[[selectedKey,selectedRows]]:[])
+    : pipingClassIndex;
   const classOverrides=pipingClassSelection?.pinned?{...overrides,pipingClass:{},pipingClassApprox:{},approxPipingClass:{}}:overrides;
   const classMatch = findBestPipingClassRow({
     pipingClass: requestedPipingClass,
@@ -486,7 +489,7 @@ export function resolveBranchProcessData({
     componentType,
     rating: '',
     schedule,
-    pipingClassIndex,
+    pipingClassIndex:selectedIndex,
     overrides:classOverrides,
     config:classResolverConfig,
   });
@@ -524,7 +527,7 @@ export function resolveBranchProcessData({
     boreMm,
     componentType,
     rating: ratingAuthority.rating,
-    pipingClassIndex,
+    pipingClassIndex:selectedIndex,
     overrides:classOverrides,
     overrideKeys,
     xmlNode,

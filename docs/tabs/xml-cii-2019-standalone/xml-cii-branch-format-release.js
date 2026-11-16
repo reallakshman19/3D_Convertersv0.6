@@ -2,7 +2,7 @@
  * Evaluates every selected occurrence, independently of Regex's interactive sample cap. */
 import { extractBranchFieldsWithFormats } from '../../converters/xml-cii2019-core/branch-format-extraction.js';
 import {resolvePreviewPipingClassAuthority} from '../../converters/xml-cii2019-core/piping-class-source-resolver.js';
-import {_xmlCiiFindLineListRow,_normaliseLineListMatch,_rowText} from './ui-adapted/xml-cii-adapted-preview-dryrun-core.js';
+import {_xmlCiiFindLineListRow,_normaliseLineListMatch} from './ui-adapted/xml-cii-adapted-preview-dryrun-core.js';
 import { deriveMappedLineKeyForBranch } from '../../converters/xml-cii2019-core/regex-line-key.js';
 
 function text(value) { return String(value ?? '').trim(); }
@@ -66,7 +66,7 @@ export function auditConfiguredBranchFormats(branchOccurrences = [], config = {}
       const expectedLineKey = deriveMappedLineKeyForBranch(branch.branchName, config) || identity.lineKey;
       const lineMatch=_normaliseLineListMatch(_xmlCiiFindLineListRow(expectedLineKey,config),config);
       const selection=resolvePreviewPipingClassAuthority({branchName:branch.branchName,branchClass:identity.pipingClass,
-        lineListClass:_rowText(lineMatch,['pipingClass','Piping Class','PIPING_CLASS']),lineListExact:!!lineMatch,config});
+        lineListClass:lineMatch?.pipingClass,lineListExact:!!lineMatch,config});
       const authorizedClassOverride = actual.pipingClassMethod === 'override'&&!selection.pinned;
       if (text(actual.lineKey) !== text(expectedLineKey)
         || (!authorizedClassOverride

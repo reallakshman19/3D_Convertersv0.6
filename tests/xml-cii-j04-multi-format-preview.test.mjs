@@ -252,3 +252,19 @@ test('Step 4 source columns inline conflict radio pair and insulation columns la
  const t=new XmlCiiAdaptedEditablePreviewTable({branchRows:[row],nodesByBranch:new Map()});
  const html=t.renderHTML();assert.match(html,/name="mc-pc-source-0" data-mc-pc-source="regex"/);assert.match(html,/data-mc-pc-source="line-list" data-mc-pc-row="0" checked/);assert.match(html,/data-mc-pd-field="insThk"/);assert.match(html,/data-mc-pd-field="insType"/);
 });
+
+test('Step 4 config roundtrip retains branch source choice and mapped insulation columns',async()=>{
+ const {parseXmlCiiEnrichmentConfig}=await import('../converters/xml-cii2019-core/config.js');
+ const {normalizeLineListRow}=await import('../converters/xml-cii2019-core/linelist-mapping.js');
+ const {resolvePreviewPipingClassAuthority:r}=await import('../converters/xml-cii2019-core/piping-class-source-resolver.js');
+ const choice={source:'regex',regex:'91261M7',lineList:'61440'};
+ const cfg=parseXmlCiiEnrichmentConfig(JSON.stringify({overrides:{pipingClassSource:{[alternativeBranch]:choice},processData:{S8822000:{insThk:'0',insType:'H'}}},linelist:{masterRows:[{'Insulation Thickness [mm]':'25-50','Insulation Type':'H'}]}}));
+ assert.deepEqual(cfg.overrides.pipingClassSource[alternativeBranch],choice);
+ assert.equal(cfg.overrides.processData.S8822000.insThk,'0');
+ const a={branchName:alternativeBranch,branchClass:'91261M7',lineListClass:'61440',lineListExact:true,config:cfg};
+ assert.equal(r(a).requestedPipingClass,'91261M7');
+ assert.equal(r({...a,lineListClass:'61441'}).requestedPipingClass,'61441');
+ const row=normalizeLineListRow(cfg.linelist.masterRows[0],cfg.linelist.fieldMap,0);
+ assert.equal(row.insThk,'25-50');assert.equal(row.insType,'H');
+ assert.equal(normalizeLineListRow({'Selected':'','Insulation Type':'H'},{insType:'Selected'},0).insType,'');
+});
