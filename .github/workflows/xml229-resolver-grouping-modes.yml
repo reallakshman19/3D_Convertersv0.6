@@ -13,6 +13,9 @@ on:
       - 'tests/test_xml229_resolver_grouping_modes.py'
       - 'tests/test_xml229_bm3_kind_quarantine.py'
       - 'tests/xml-cii-mds-position-restraints.test.mjs'
+      - 'tests/xml-cii-staged-json-trace-sidecar.test.mjs'
+      - 'tabs/xml-cii-2019-standalone/xml-cii-staged-json-trace-sidecar.js'
+      - 'docs/tabs/xml-cii-2019-standalone/xml-cii-staged-json-trace-sidecar.js'
       - 'converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js'
       - 'docs/converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js'
       - '.github/workflows/xml229-resolver-grouping-modes.yml'
@@ -40,6 +43,8 @@ jobs:
         run: node --test tests/xml-cii-resolver-grouping-modes.test.mjs
       - name: Run POS PS Root native tests
         run: python -m unittest discover -s tests -p 'test_xml229_resolver_grouping_modes.py' -v
+      - name: Verify JSON trace CSV sidecar roundtrip
+        run: node --test tests/xml-cii-staged-json-trace-sidecar.test.mjs
       - name: Run BM3 restraint source conflict and quarantine tests
         run: |
           node --test tests/xml-cii-mds-position-restraints.test.mjs
@@ -58,3 +63,4 @@ jobs:
           diff -u converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js docs/converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js
           diff -u tabs/xml-cii-2019-standalone/xml-cii-mds-restraint-closure.js docs/tabs/xml-cii-2019-standalone/xml-cii-mds-restraint-closure.js
           diff -u tabs/xml-cii-2019-standalone/xml-cii-restraint-audit.js docs/tabs/xml-cii-2019-standalone/xml-cii-restraint-audit.js
+          diff -u tabs/xml-cii-2019-standalone/xml-cii-staged-json-trace-sidecar.js docs/tabs/xml-cii-2019-standalone/xml-cii-staged-json-trace-sidecar.js
