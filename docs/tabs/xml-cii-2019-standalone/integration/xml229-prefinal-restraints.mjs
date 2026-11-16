@@ -11,6 +11,7 @@ import {inventoryRestraintAudit,collectRestraintAudit,completeRestraintAudit,bin
 import {materializeXml229PhysicalVertexRestraints} from './xml229-physical-vertex-prefinal-materializer.mjs';
 import {recordXml229AttachmentDelegation} from './xml229-source-attachment-policy.mjs';
 import {migrateSupportMappingConfig} from '../../../converters/xml-cii2019-core/support-mapping-config.js';
+import {isQuarantinableXml229RestraintError} from '../../../converters/xml-cii2019-core/xml229-restraint-kind-conflicts.js';
 
 const local=n=>String(n?.localName||n?.nodeName||'').replace(/^.*:/,'');
 const elements=n=>[...(n?.childNodes||[])].filter(x=>x.nodeType===1);
@@ -39,7 +40,8 @@ function physicalAudit(vertex,before,document,config){
   }
   return collectRestraintAudit(before,document,notes,[],config);
 }
-export async function prepareXml229PrefinalRestraints({xmlText,stagedJsonText='',config={}}){
+export async function prepareXml229PrefinalRestraints({xmlText,stagedJsonText='',config={},purpose='final'}){
+  if(!['preview','final'].includes(purpose))throw Object.assign(new Error('Invalid restraint execution purpose'),{code:'PREFINAL_RESTRAINT_CONFIG_INVALID'});
   const original=parse(xmlText);
   const before=inventoryRestraintAudit(original);
   const originalShape=JSON.stringify(sourceShape(original));
@@ -47,19 +49,40 @@ export async function prepareXml229PrefinalRestraints({xmlText,stagedJsonText=''
     migrateSupportMappingConfig(config).useJsonForRestraints!==false;
   const vertex=enabled?materializeXml229PhysicalVertexRestraints({
     originalXmlText:xmlText,stagedJsonText,config,document:original}):null;
-  const resolved=enabled?null:closeGovernedMdsPositionRestraintsXml(
-    xmlText,stagedJsonText,config,{requireUnambiguous:true});
+  let resolved=null;
+  if(!enabled){
+    // Clean inputs retain exactly the strict geometry and audit.
+    try{resolved=closeGovernedMdsPositionRestraintsXml(
+      xmlText,stagedJsonText,config,{requireUnambiguous:true});}
+    catch(error){
+      if(purpose!=='preview'||!isQuarantinableXml229RestraintError(error))throw error;
+      resolved=closeGovernedMdsPositionRestraintsXml(xmlText,stagedJsonText,config,
+        {requireUnambiguous:true,conflictPolicy:'quarantine'});
+      if(!resolved.warnings?.length)throw error;
+    }
+  }
   const document=vertex?.document||(resolved.changed?parse(resolved.xmlText):original);
   const captured=enabled?physicalAudit(vertex,before,document,config):resolved.restraintAudit;
-  const fallback=closeGovernedAttaDefaultRestraints(document,config,{skipNodes:vertex?.skipDefaultAtta});
+  const warnings=resolved?.warnings||[];
+  const skipNodes=new Set(vertex?.skipDefaultAtta||[]);
+  // Do not replace a quarantined ATTA with an inferred default REST.
+  const warnedIndexes=new Set(warnings.map(w=>w.xmlIndex));
+  let xmlIndex=0;
+  for(const branch of [...document.getElementsByTagName('Branch')])
+    for(const node of elements(branch).filter(n=>local(n)==='Node')){
+      if(warnedIndexes.has(++xmlIndex))skipNodes.add(node);
+    }
+  const fallback=closeGovernedAttaDefaultRestraints(document,config,{skipNodes});
   if(originalShape!==JSON.stringify(sourceShape(document)))
     throw Object.assign(new Error('Support staging changed unrelated source fields'),
       {code:'PREFINAL_RESTRAINT_SOURCE_DRIFT'});
   const restraintAudit=await bindRestraintAudit(
     recordXml229AttachmentDelegation(completeRestraintAudit(captured,before,document,config),vertex,document),
     {xmlText,stagedJsonText,config,preparedXmlText:new XMLSerializer().serializeToString(document)});
-  return {document,proof:Object.freeze({schema:enabled?'XML229.PrefinalRestraints.v2':'XML229.PrefinalRestraints.v1',
+  const restraintReview=Object.freeze({status:warnings.length?'HOLD':'NOT_ASSESSED',warnings});
+  return {document,restraintReview,proof:Object.freeze({schema:enabled?'XML229.PrefinalRestraints.v2':'XML229.PrefinalRestraints.v1',
     originalJsonSha256:await digestUtf8(stagedJsonText),restraintAudit,
+    ...(warnings.length?{engineeringRestraintAcceptance:'HOLD'}:{}),
     ...(enabled?{physicalVertexMemberCensus:vertex.proofSummary}:{})}),
     stats:{...resolved?.stats,...fallback.stats,...(enabled?vertex.proofSummary:{})}};
 }
