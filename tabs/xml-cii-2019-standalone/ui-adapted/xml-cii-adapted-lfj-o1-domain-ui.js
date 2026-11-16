@@ -6,6 +6,7 @@
  */
 import { showRestraintReview } from './xml-cii-adapted-preview-failure-notice.js';
 const SCHEMA='LFJ.O1.DomainWorker.v1';
+const currentDomains=new WeakMap();
 const HEADERS={
  node:[['xmlNode','XML Node'],['xmlBranch','XML Branch'],['matchType','Match'],
    ['dtxrPosValue','DTXR_POS'],['dtxrPsName','DTXR_PS/NAME'],['effectiveSource','Source'],
@@ -118,7 +119,8 @@ function paint(session){
   const tools=document.createElement('div');
   const buttons=[
     ['node','Node wise trace'],['evidence','Evidence tree'],
-    ['export-node','Download complete Node CSV'],['export-evidence','Download complete Evidence CSV']
+    ['export-node','Download complete Node CSV'],['export-evidence','Download complete Evidence CSV'],
+    ['export-sidecar','Download complete staged JSON trace sidecar CSV']
   ];
   for(const [kind,label] of buttons){
     const b=document.createElement('button');b.type='button';b.textContent=label;
@@ -198,6 +200,7 @@ export async function startLfjO1Domain(session,stateRef){
     ready:false,counts:null,page:null,provenance:null,
     panel:session.domainPanel};
   session.domain=d;
+  currentDomains.set(stateRef,session);
   worker.onmessage=({data:m})=>{
     if(m?.schema!==SCHEMA||m.jobId!==job.id||session.domain!==d)return;
     if(m.kind==='FAILED'){
@@ -264,7 +267,7 @@ export async function viewLfjO1Page(session,type='node',start=0){
 export async function exportLfjO1Csv(session,type){
   const d=session.domain;
   if(!d?.ready||!currentBasis(session,d.job,d.basis))throw typed('O1_EXPORT_SOURCE_STALE');
-  if(!['node','evidence'].includes(type))throw typed('O1_EXPORT_TYPE');
+  if(!['node','evidence','sidecar'].includes(type))throw typed('O1_EXPORT_TYPE');
   if(d.exporting)throw typed('O1_EXPORT_BUSY');
   const begin=await call(d,'EXPORT',{type},120000);
   if(begin.type!==type||!Number.isSafeInteger(begin.bytes)||begin.bytes<1)
@@ -276,7 +279,7 @@ export async function exportLfjO1Csv(session,type){
   if(!currentBasis(session,d.job,d.basis))throw typed('O1_EXPORT_SOURCE_STALE');
   const blob=new Blob(chunks,{type:'text/csv;charset=utf-8'});
   if(blob.size!==begin.bytes)throw typed('O1_EXPORT_INCOMPLETE');
-  const name=type==='node'?'xml-cii-node-wise-trace.csv':'xml-cii-evidence-tree.csv';
+  const name=type==='sidecar'?'staged-json-trace-sidecar.csv':type==='node'?'xml-cii-node-wise-trace.csv':'xml-cii-evidence-tree.csv';
   const url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download=name;a.style.display='none';
   document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
@@ -292,4 +295,14 @@ export function mountLfjO1DomainUi(group,session){
   if(session.domain){session.domain.panel=panel;paint(session);}
   else {const p=document.createElement('p');p.dataset.lfjO1TraceStatus='true';
     p.textContent='Load original XML + JSON, then Build to run the independent Worker.';panel.append(p);}
+}
+
+/** Use only the live original source Worker; never parse an O1 Blob in UI. */
+export async function compareCurrentLfjO1Sidecar(stateRef,rows,assignments){
+  const session=currentDomains.get(stateRef),d=session?.domain;
+  if(!d?.ready||!currentBasis(session,d.job,d.basis))return null;
+  const response=await call(d,'COMPARE_SIDECAR',{rows,assignments},240000);
+  if(!currentBasis(session,d.job,d.basis))throw typed('O1_SOURCE_STALE');
+  if(response.benchmark?.schema!=='XML229.StagedJsonSidecarRoundTrip.v1')throw typed('O1_SIDECAR_COMPARE_INVALID');
+  return response.benchmark;
 }
