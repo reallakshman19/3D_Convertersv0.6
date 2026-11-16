@@ -225,7 +225,11 @@ export async function openXml229WorkerHeldOriginalWeightReview({
    },
    async readPreviewResult(){
      const result=await rpc({kind:'read',what:'preview',sourceId});
-     if(result?.engineeringAcceptance!=='NOT_ASSESSED'||
+     const reviewHold=result?.engineeringAcceptance==='HOLD'&&
+       result?.restraintReview?.status==='HOLD'&&
+       Array.isArray(result.restraintReview.warnings)&&result.restraintReview.warnings.length>0;
+     if((result?.engineeringAcceptance!=='NOT_ASSESSED'&&!reviewHold)||
+       (result?.restraintReview?.status==='HOLD'&&!reviewHold)||
        result?.fullFactPopulationAccepted!==false||
        result?.originalStagedSourceSha256!==sourceIdentity.sha256||
        result?.originalStagedSourceGeneration!==sourceIdentity.generationId||
