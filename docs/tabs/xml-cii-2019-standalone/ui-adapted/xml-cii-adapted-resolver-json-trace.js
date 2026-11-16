@@ -219,6 +219,18 @@ function renderDelimiterControls(parent, state) {
   matchLabel.appendChild(matchSelect);
   bar.appendChild(matchLabel);
 
+
+  const exportLabel = createElement('label');
+  if (exportLabel.style) Object.assign(exportLabel.style,
+    { display: 'flex', alignItems: 'center', gap: '4px' });
+  const exportCheckbox = createElement('input');
+  exportCheckbox.type = 'checkbox';
+  exportCheckbox.dataset.field = 'resolver-export-trace-sidecar';
+  exportCheckbox.checked = cfg.exportTraceSidecar !== false;
+  exportLabel.append(exportCheckbox, createElement('span', 'Export CSV trace sidecar when building from JSON'));
+  exportLabel.title = 'Keeps one source row per staged JSON member, including coincident ST/GT/REST members. A separate download remains available.';
+  bar.appendChild(exportLabel);
+
   const suffixLabel = createElement('label');
   if (suffixLabel.style) Object.assign(suffixLabel.style, { display: 'flex', alignItems: 'center', gap: '4px' });
   suffixLabel.appendChild(createElement('span', 'PS strip suffixes:'));
@@ -299,6 +311,13 @@ function renderResolverIndex(parent, state, stateRef, render, scopeState) {
   actions.append(buildBtn, actionButton('save-resolver-json-config', 'Save to config'), createElement('span', state.resolverJsonTraceWriteBackStatus || 'Resolver config not saved yet.', 'xml-cii-phase-help'));
   section.appendChild(actions);
   renderDelimiterControls(section, state);
+  const sidecar = createElement('div', '', 'xml-cii-resolver-actions');
+  sidecar.append(actionButton('download-json-trace-sidecar', 'Download staged JSON trace CSV',
+    !state.jsonTraceSidecarCsv));
+  sidecar.append(createElement('span', state.jsonTraceSidecarStatus ||
+    'Build / refresh resolver index to generate a CSV sidecar from staged JSON.',
+    'xml-cii-phase-help'));
+  section.appendChild(sidecar);
 
   const metrics = createElement('div', '', 'xml-cii-resolver-metrics');
   metrics.append(metric('XML nodes', stat(result, 'xmlNodeCount')), metric('Node keys', stat(result, 'nodeKeyCount')), metric('PS keys', stat(result, 'psKeyCount')), metric('POS keys', stat(result, 'posKeyCount')));
