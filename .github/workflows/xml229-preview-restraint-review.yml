@@ -21,7 +21,7 @@ jobs:
       - name: Strict Final and review-only Preview production computation
         run: |
           node --test --test-name-pattern='actual Preview producer quarantines' tests/xml-cii-229-p4-real-engineering-fact-producer.test.mjs
-          node --test tests/xml-cii-mds-position-restraints.test.mjs tests/xml-cii-staged-json-trace-sidecar.test.mjs
+          node --test tests/xml-cii-mds-position-restraints.test.mjs tests/xml-cii-staged-json-trace-sidecar.test.mjs tests/xml-cii-table-trace-source.test.js
           node --test tests/xml229-json-restraint-body-transfer.test.mjs
   browser:
     runs-on: ubuntu-24.04
