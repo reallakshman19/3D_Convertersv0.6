@@ -358,11 +358,11 @@ def append_profile(node, kind, attrs, config, allowed=None, *, selected_source=F
     ns = node.tag.rsplit('}', 1)[0] + '}' if '}' in node.tag else ''
     d = direction(p, attrs, node)
     raw = source_gap(attrs)
-    # V1 MDS selected REST retains its explicit legacy global defaultGap
-    # when the member has no clearance. A generic/ATTA fallback and V2 slot
-    # remain source-gap owned (zero if absent), as in the JS producer.
-    legacy_rest_gap = text(config.get('defaultGap')) if selected_source and kind == 'REST' else ''
-    require_gap = numeric(raw) if raw else numeric(legacy_rest_gap) if legacy_rest_gap else 0
+    # An explicit source gap (including zero) owns clearance. No global
+    # defaultGap may be replayed as physical source evidence. Until the
+    # Step 7 profile gap contract is installed on BOTH JS and native sides,
+    # unowned clearance remains zero.
+    require_gap = numeric(raw) if raw else 0
     if require_gap is None or not math.isfinite(require_gap):
         raise ValueError('NATIVE_PREFINAL_RESTRAINT_GAP_INVALID')
     gap = str(require_gap)
