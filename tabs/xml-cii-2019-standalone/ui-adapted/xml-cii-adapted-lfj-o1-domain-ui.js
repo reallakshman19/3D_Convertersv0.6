@@ -4,7 +4,7 @@
  * provenance are re-attested before allowing user trace/CSV interaction.
  * No output is engineeringReady or Preview/Weight-approved.
  */
-import { showPreviewBlocker } from './xml-cii-adapted-preview-failure-notice.js';
+import { showRestraintReview } from './xml-cii-adapted-preview-failure-notice.js';
 const SCHEMA='LFJ.O1.DomainWorker.v1';
 const HEADERS={
  node:[['xmlNode','XML Node'],['xmlBranch','XML Branch'],['matchType','Match'],
@@ -113,8 +113,8 @@ function paint(session){
       'Not approved engineering output, Preview or Weight.'
     : 'Awaiting an independently committed source index and original XML.';
   panel.append(info);
-  showPreviewBlocker(panel);
   if(!d.ready)return;
+  showRestraintReview(panel,d.restraintReview);
   const tools=document.createElement('div');
   const buttons=[
     ['node','Node wise trace'],['evidence','Evidence tree'],
@@ -243,7 +243,7 @@ export async function startLfjO1Domain(session,stateRef){
     notify(session,'O1 Worker trace completed; verifying all selected original JSON paths…');
     d.provenance=await auditSourcePaths(session,d,ready);
     if(!currentBasis(session,job,basis))throw typed('O1_SOURCE_STALE');
-    d.counts=ready.counts;d.ready=true;
+    d.counts=ready.counts;d.restraintReview=ready.restraintReview;d.ready=true;
     await viewLfjO1Page(session,'node',0);
     paint(session);
     notify(session,'O1 matched trace source-path verified ('+d.provenance.wanted+
