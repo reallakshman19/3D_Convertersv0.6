@@ -101,9 +101,10 @@ try{
   }finally{remote.cancel();}
  });
  assert.equal(result.rendered,true,result.notice);
- assert.match(result.notice,/FOR REVIEW/);
+ assert.match(result.notice,/for review/i);
  assert.doesNotMatch(result.notice,/Preview failed/);
- assert.equal(result.acceptance,'HOLD');
+ assert.equal(result.acceptance,'NOT_ASSESSED');
+ assert.equal(result.review.engineeringRestraintAcceptance,'HOLD');
  assert.equal(result.review.warnings.length,2);
  assert.equal(result.proof.engineeringRestraintAcceptance,'HOLD');
  assert.equal(result.proof.engineeringFactsVerified,true);
@@ -113,7 +114,7 @@ try{
  assert.equal(result.o1.engineeringReady,false);
  assert.ok(result.o1.counts.evidence>0);
  assert.equal(result.o1.review.warnings.length,2);
- assert.match(result.o1.notice,/FOR REVIEW/);
+ assert.match(result.o1.notice,/for review/i);
  assert.equal(result.o1.sidecarRows,4);
  assert.equal(new Set(result.o1.sidecarNames).size,4);
  assert.equal(result.o1.benchmark.complete,true);
