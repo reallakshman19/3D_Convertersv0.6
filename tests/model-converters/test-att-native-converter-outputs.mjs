@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { run } from '../../tabs/model-converters/converters/rvmattr-to-xml.js';
 import { _buildXmlFromStagedJsonText } from '../../tabs/model-converters/converters/stagedjson-to-xml.js';
 import { normalizeAttRvmMdsMember } from '../../converters/rmss-attribute-parser.js';
+import { applySupportMappingRowPatch, migrateSupportMappingConfig } from '../../converters/xml-cii2019-core/support-mapping-config.js';
 
 function block(type, name, owner, attrs = {}) {
   return ['NEW '+name,'NAME:= '+name,'TYPE:= '+type,'OWNER:= '+owner,
@@ -117,6 +118,22 @@ assert.equal(arbitrary.NODETYPE,'8');assert.equal(arbitrary.NODEGAP,'12');
 const composite=structuredClone(config);composite.supportMapping.kindProfiles.GUIDE.xmlTypes=['GUI','LIM'];
 const comp={...guide};assert.equal(normalizeAttRvmMdsMember(comp,composite),'GUIDE');
 assert.equal(comp.NODETYPE,undefined);assert.deepEqual(comp.NODETYPE_CODES,['8','9']);
+const edited=structuredClone(config);
+applySupportMappingRowPatch(edited,'guide-custom',{gap:'42'});
+assert.equal(migrateSupportMappingConfig(edited).kindProfiles.GUIDE.gap,'42');
+const changedGap={...gapless};normalizeAttRvmMdsMember(changedGap,edited);
+assert.equal(changedGap.NODEGAP,'42');
+const ownZero={...guide,CMPSUPGAP:'GAP=0mm'};normalizeAttRvmMdsMember(ownZero,edited);
+assert.equal(ownZero.SUPPORT_EFFECTIVE_GAP,'0');
+const reverseGap={...guide,CMPSUPGAP:'25MM GAP'};normalizeAttRvmMdsMember(reverseGap,edited);
+assert.equal(reverseGap.SUPPORT_EFFECTIVE_GAP,'25');
+const noRule={NODETYPE:'14',NAME:'/UNMATCHED',MDSSUPPTYPE:'UNMATCHED'};
+assert.equal(normalizeAttRvmMdsMember(noRule,config),'');
+assert.equal(noRule.SUPPORT_MAPPING_STATUS,'FOR_REVIEW_NO_RULE');
+const tie=structuredClone(config);
+tie.supportMapping.rules.push({...tie.supportMapping.rules[0],id:'guide-tie',kind:'LINESTOP'});
+const tieMember={...guide};assert.equal(normalizeAttRvmMdsMember(tieMember,tie),'');
+assert.equal(tieMember.SUPPORT_MAPPING_STATUS,'FOR_REVIEW_RULE_TIE');
 const disabled=structuredClone(config);disabled.supportMapping.useJsonForRestraints=false;
 const off={...guide};assert.equal(normalizeAttRvmMdsMember(off,disabled),'');assert.equal(off.NODETYPE,'14');
 // Actual browser storage contract: latest saved table picked up per export.
