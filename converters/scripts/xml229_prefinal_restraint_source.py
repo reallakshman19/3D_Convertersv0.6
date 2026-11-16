@@ -324,6 +324,7 @@ def resolve(node, branch, groups, tol, field, require, index=None, config=None):
     if mode == 'POS':
         hits = [(relationship(branch, g['branch']), math.dist(pos, g['point']), i, g)
                 for i in (index.spatial.nearby(pos) if pos is not None else ())
+                for g in (groups[i],)
                 if g['point'] is not None and relationship(branch, g['branch'])
                 and math.dist(pos, g['point']) <= tol]
         hits.sort(key=lambda item: (-item[0], item[1], item[2]))
