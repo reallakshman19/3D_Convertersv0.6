@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStagedJsonTraceSidecar, JSON_TRACE_SIDECAR_COLUMNS }
+import { buildStagedJsonTraceSidecar, JSON_TRACE_SIDECAR_COLUMNS,compareStagedJsonTraceSidecar,traceMemberAssignments,compareSidecarXmlAssignments }
   from '../tabs/xml-cii-2019-standalone/xml-cii-staged-json-trace-sidecar.js';
 import { parseTraceTableText, autoMapTraceTableFields, headersFromTraceRows }
   from '../tabs/xml-cii-2019-standalone/xml-cii-table-trace-source.js';
@@ -70,6 +70,11 @@ test('CSV sidecar re-imports through existing CSV / XLS Trace Source field mappe
   assert.equal(table.matchedFacts.length,1);
   const receipt=table.matchedFacts[0].ledgerRecord;
   assert.equal(receipt.positionMembers.length,4);
+  assert.deepEqual(receipt.positionMembers.map(m=>m.sourcePath).sort(),out.memberRows.map(r=>r['JSON source path']).sort());
+  assert.equal(fieldMap.nodeType,'NODETYPE');
+  assert.equal(fieldMap.sourceAttributes,'Source attributes JSON');
+  assert.equal(receipt.positionMembers.find(m=>m.mdsType==='ST501').cmpSupGap,'GAP=35mm');
+  assert.equal(compareStagedJsonTraceSidecar(out.memberRows,rows).complete,true);
 });
 
 test('unpositioned members remain in sidecar without fabricated coordinates',()=>{
@@ -92,4 +97,33 @@ test('potential spreadsheet formulas are escaped without losing original PS evid
   const rows=parseTraceTableText(out.csv);
   assert.equal(rows.length,1);
   assert.equal(rows[0]['Name of the element'],'=WEBSERVICE("x")');
+});
+
+test('exact round trip detects missing, duplicated, extra and edited members independently of XML matches',()=>{
+ const input=JSON.parse(payload);
+ input[0].children.push({type:'PIPE',attributes:{REF:'=900/1',COMPRE:'=900/2',NAME:'Pipe "quoted"',NOTE:"  line\\n\nsecond  ",NULL:null,NUM:0,BOOL:false}});
+ input[0].children.push({type:'GASK',attributes:{}});
+ input[0].children[2].attributes.REF='=800/3';
+ input[0].children[2].attributes.COMPRE='=800/4';
+ const out=buildStagedJsonTraceSidecar(input,settings);
+ const rows=parseTraceTableText(out.csv);
+ assert.equal(rows.length,6);
+ assert.equal(rows[2]['Reference of the element'],'=800/3');
+ assert.equal(rows[2]['Attached component REF'],'=800/4');
+ assert.equal(rows[4]['Name of the element'],'Pipe "quoted"');
+ assert.deepEqual(JSON.parse(rows[4]['Source attributes JSON']),input[0].children[4].attributes);
+ assert.deepEqual(JSON.parse(rows[4]['Source member JSON']),input[0].children[4]);
+ assert.equal(compareStagedJsonTraceSidecar(out.memberRows,rows.slice().reverse()).matched,6);
+ const edited=structuredClone(rows);
+ edited[2]['SUPPORT GAP']='GAP=36mm';
+ edited[3]['NODETYPE']='8';
+ edited[4]['Source attributes JSON']='{}';
+ edited.splice(5,1);
+ edited.push({...edited[0]},{...edited[1],'JSON source path':'$[0].children[999]'});
+ const bad=compareStagedJsonTraceSidecar(out.memberRows,edited);
+ assert.equal(bad.complete,false);
+ assert.equal(bad.missing,1);assert.equal(bad.duplicates,1);assert.equal(bad.extra,1);assert.equal(bad.changed,3);
+ assert.equal(bad.matched,1);
+ const assignments=compareSidecarXmlAssignments([{xmlIndex:1,paths:['a','b']}],[{xmlIndex:1,paths:['a']}]);
+ assert.equal(assignments.mismatched,1);
 });
