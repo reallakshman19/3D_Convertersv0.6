@@ -19,6 +19,7 @@ export const TRACE_TABLE_FIELDS = Object.freeze([
   { name: 'componentSpec', label: 'Component spec', required: false, aliases: ['Component spec reference', 'Spec Reference', 'Component Spec', 'Specification', 'SPRE'] },
   { name: 'bore', label: 'Bore', required: false, aliases: ['BORE', 'ABORE', 'LBORE', 'Nominal Bore', 'Size'] },
   { name: 'site', label: 'Site', required: false, aliases: ['SITE', 'Site Area'] },
+  ...Object.entries({sourcePath:'JSON source path',sourceOrdinal:'JSON ordinal',nodeType:'NODETYPE',nodeGap:'NODEGAP',mdsFunction:'MDSSUPPFUNC',mdsType:'MDSSUPPTYPE',catalogueType:'CMPSUPTYPE',memberRef:'Member REF',attachedComponentRef:'Attached component REF',sourceAttributes:'Source attributes JSON',sourceMember:'Source member JSON'}).map(([name,header])=>({name,label:header,required:false,aliases:[header],exactHeader:true})),
 ]);
 
 export const REQUIRED_TRACE_TABLE_FIELD_NAMES = Object.freeze(
@@ -49,7 +50,7 @@ function csvLine(line, delimiter) {
     }
   }
   cells.push(cell);
-  return cells.map((value) => text(value).replace(/^['"]|['"]$/g, ''));
+  return cells.map((value) => text(value).replace(/^'(?=[=+\-@])/, ''));
 }
 
 function bestDelimiter(lines) {
@@ -156,6 +157,7 @@ export function autoMapTraceTableFields(headers, rawRows, config) {
   }
   for (const field of TRACE_TABLE_FIELDS) {
     if (mapped[field.name]) continue;
+    if(field.exactHeader){mapped[field.name]=(headers||[]).find(h=>compact(h)===compact(field.aliases[0]))||'';continue;}
     let bestHeader = '';
     let bestScore = 0;
     for (const header of headers || []) {
