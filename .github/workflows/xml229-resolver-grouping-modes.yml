@@ -47,6 +47,8 @@ jobs:
         run: |
           python -m unittest discover -s tests -p 'test_xml229_datum_node_type_mutation.py' -v
           node --test tests/xml-cii-support-kind-owner-precedence.test.mjs
+      - name: Validate original JSON restraint body transfer and native forgery challenges
+        run: node --test tests/xml229-json-restraint-body-transfer.test.mjs
       - name: Verify JSON trace CSV sidecar roundtrip
         run: node --test tests/xml-cii-staged-json-trace-sidecar.test.mjs
       - name: Run BM3 restraint source conflict and quarantine tests
