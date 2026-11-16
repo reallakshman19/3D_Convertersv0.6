@@ -221,3 +221,14 @@ test('real JSON Trace checkbox writes the shared support config and persists its
    Object.defineProperty(globalThis,'localStorage',{configurable:true,value:oldStorage});
  }
 });
+
+test('failed mapped proposal cannot fall through to generated scalar outside physical ST/GT detector',async()=>{
+ const source=regenerated(),attrs=source[0].children[2].attributes;
+ attrs.MDSSUPPFUNC='OTHER';
+ attrs.NODETYPE_CODES=['9'];
+ const config={...all,xml229SourceFieldPrecedence:{mappedCodes:true,gap:true}};
+ const review=await stage(source,config,'preview');
+ assert.equal(review.restraintReview.status,'FOR_REVIEW');
+ await assert.rejects(stage(source,config),{code:'PREFINAL_RESTRAINT_TYPE_AMBIGUOUS'});
+ assert.throws(()=>native(source,config),/NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS/);
+});

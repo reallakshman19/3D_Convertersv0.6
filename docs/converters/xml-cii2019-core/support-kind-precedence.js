@@ -255,6 +255,14 @@ export function stagedFieldKindDecision(attrs={},config={}) {
 export function governedSupportKind(attrs = {}, config = {}, governed = GOVERNED, observe = null) {
   const preferred=stagedFieldKindDecision(attrs,config);
   if(preferred&&governed.includes(preferred.kind)){observe?.(preferred);return preferred;}
+  // The physical ST/GT conflict branch already holds failed proposals.
+  // Other reclassified members must not fall through to the generated scalar.
+  if(config.xml229SourceFieldPrecedence?.mappedCodes===true&&text(attrs.SOURCE_NODETYPE)&&
+     (Object.hasOwn(attrs,'NODETYPE_CODES')||text(attrs.NODETYPE_CLASSIFICATION_SOURCE)==='STEP7_SUPPORT_MAPPING')&&
+     (text(attrs.NODETYPE)!==text(attrs.SOURCE_NODETYPE)||
+      !Array.isArray(attrs.NODETYPE_CODES)||attrs.NODETYPE_CODES.length!==1||
+      text(attrs.NODETYPE_CODES[0])!==text(attrs.SOURCE_NODETYPE)))
+    throw refuse('PREFINAL_RESTRAINT_TYPE_AMBIGUOUS','Mapped restraint codes could not be validated against the current Step 7 rule');
   const byNodeType = nodeTypeSupportKind(attrs, config);
   if (byNodeType && governed.includes(byNodeType)) {
     // A user-authored Step 7 row that names this member as another governed

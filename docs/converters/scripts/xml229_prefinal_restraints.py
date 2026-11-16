@@ -181,6 +181,12 @@ def kinds(entries, require, config=None):
         preferred = '' if approval else preferred_kind(a, config, conflict)
         if conflict:
             require(bool(approval or preferred), 'NATIVE_PREFINAL_RESTRAINT_TYPE_KIND_CONFLICT')
+        elif not preferred and field_precedence(config,'mappedCodes') and text(a.get('SOURCE_NODETYPE')) and (
+                'NODETYPE_CODES' in a or text(a.get('NODETYPE_CLASSIFICATION_SOURCE'))=='STEP7_SUPPORT_MAPPING'):
+            codes=a.get('NODETYPE_CODES')
+            original=text(a.get('SOURCE_NODETYPE'))
+            require(text(a.get('NODETYPE'))==original and isinstance(codes,list) and
+                    len(codes)==1 and text(codes[0])==original, 'NATIVE_PREFINAL_RESTRAINT_TYPE_AMBIGUOUS')
         node_type_kind = approval or preferred or {'+Y': 'REST', 'GUI': 'GUIDE', 'LIM': 'LINESTOP'}.get(
             node_type_mutation(a, config), '')
         if preferred:
