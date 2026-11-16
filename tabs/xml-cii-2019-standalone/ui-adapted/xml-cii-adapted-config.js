@@ -125,10 +125,13 @@ function _renderModelingCard(configObj, syncJsonText, controls) {
     configObj.defaultFriction = val;
     syncJsonText();
   });
-  controls.gapInput = makeNumberInput(card, 'Legacy Gap (mm) — non-Step 7 only; set restraint Gap in 7 Support Type Mapper', configObj.defaultGap ?? 0, '0.1', (val) => {
+  controls.gapInput = makeNumberInput(card, 'Legacy Default Gap (mm)', configObj.defaultGap ?? 0, '0.1', (val) => {
     configObj.defaultGap = val;
     syncJsonText();
   });
+  card.appendChild(createElement('p',
+    'For generated REST/GUIDE/LINESTOP gaps, edit 7 Support Type Mapper → Gap. This legacy gap is for non-Step 7 enrichment only.',
+    'xml-cii-phase-help'));
   controls.SifInput = makeNumberInput(card, 'Default Tee SIF Type', configObj.defaultTeeSifType ?? 5, '1', (val) => {
     configObj.defaultTeeSifType = val;
     syncJsonText();
