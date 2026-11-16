@@ -127,11 +127,19 @@ class Bm2SupportSourceWitness(unittest.TestCase):
         datum = {"type": "SUPPORT", "desc": "Cradle Retainer Style-314",
                  "attrs": {"DTXR": "Cradle Retainer Style-314",
                            "NODETYPE": "17", "NAME": "/PS-EDITED"}}
-        self.assertNotIn("REST", kinds([datum], require, {}))
+        # The source NODETYPE=17 already mutates to REST=14, so saving
+        # another REST alias must not change its authoritative classification.
+        self.assertIn("REST", kinds([datum], require, {}))
         cfg = {"supportTypeMapper": {"rows": [
             {"kind": "REST", "aliases": ["Cradle Retainer"]},
             {"kind": "GUIDE", "aliases": ["Guide"]}]}}
         self.assertIn("REST", kinds([datum], require, cfg))
+        # Verify the alias really is replayed where source NODETYPE is absent.
+        untyped = {"type": datum["type"], "desc": datum["desc"],
+                   "attrs": {k:v for k,v in datum["attrs"].items()
+                             if k != "NODETYPE"}}
+        self.assertNotIn("REST", kinds([untyped], require, {}))
+        self.assertIn("REST", kinds([untyped], require, cfg))
 
     def test_tab8_custom_regex_and_mutation_replay_from_current_config(self):
         def require(ok, code):
