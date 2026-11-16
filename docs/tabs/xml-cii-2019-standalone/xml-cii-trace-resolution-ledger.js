@@ -216,7 +216,9 @@ function walkStaged(value, context, out, path, sequenceRef, config, requirePoint
   const bore = text(attrValue(attrs, ['ABORE', 'LBORE', 'HBORE', 'BORE']) || value.bore || context.bore);
   const parts = descriptionParts(value, attrs, type, hasChildren);
   const psAliasValue = text(attrValue(attrs, ['PS', 'supportPs', 'psNo']));
-  const tags = supportTags([parts.name, parts.description, parts.dtxrPs, parts.labeled, psAliasValue].join(' '));
+  const tags = resolverMatchMode(config) === 'LEGACY'
+    ? supportTags([parts.name, parts.description, parts.dtxrPs, parts.labeled, psAliasValue].join(' '))
+    : [];
   const cmpSupGap = text(attrValue(attrs, ['CMPSUPGAP', 'SUPPORT GAP']));
   const isBranchContainer = type === 'BRANCH';
   const isCoordinateContainer = !!directPoint && hasChildren && !parts.description && !parts.dtxrPs;
